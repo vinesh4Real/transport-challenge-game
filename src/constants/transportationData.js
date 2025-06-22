@@ -73,11 +73,11 @@ export const TRANSPORTATION_MODES = {
     id: 'highway_24lane',
     name: '24-Lane Highway', 
     icon: '🛣️🛣️🛣️🛣️🛣️🛣️🛣️🛣️🛣️🛣️🛣️🛣️',
-    capacity: 18750, // 225k ADT ÷ 12 = ~18,750 vehicles/hour peak
+    capacity: 24000, // 12 lanes inbound × 2,000 vehicles/lane/hr
     cost: 120000000, // $120M per mile
     type: 'highway',
-    description: 'Ultra mega highway - 225,000 ADT (18,750 vehicles/hour peak)',
-    source: '225k ADT converted to peak hour traffic (ADT ÷ 12)'
+    description: 'Ultra mega highway - 24,000 vehicles/hour (12 lanes inbound)',
+    source: 'HCM 2016: 2,000 vehicles/lane/hr, one direction'
   },
   
   parking_lot: {

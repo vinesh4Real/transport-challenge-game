@@ -155,14 +155,26 @@ function TransportChallenge({ onComplete }) {
             ? TRAFFIC_FLOW_CONSTANTS.BREAKDOWN_FLOW_EFFICIENCY 
             : TRAFFIC_FLOW_CONSTANTS.STABLE_FLOW_EFFICIENCY;
           
-          // Calculate actual throughput without lane degradation
-          const throughputPeople = Math.min(carUsers * 1.2, totalHighwayCapacity * flowEfficiency);
+          // Calculate actual throughput based on highway capacity
+          const throughputPeople = Math.round(totalHighwayCapacity * flowEfficiency);
           peoplePerHour = Math.round(throughputPeople);
           const throughputVehicles = Math.round(throughputPeople / 1.2);
           
-          // Simplified speed formula: Speed = max(8, 65 * (1 - (volume / throughput)))
+          // Refined speed formula: realistic congestion curve
           const freeFlowSpeed = 65; // mph
-          averageSpeed = Math.max(8, freeFlowSpeed * (1 - (carUsers / throughputVehicles)));
+          let speedReduction = 0;
+          
+          if (volumeToCapacityRatio <= 0.5) {
+            speedReduction = 0; // No congestion below 50%
+          } else if (volumeToCapacityRatio <= 0.7) {
+            // 5% reduction per 5% V/C increase from 50% to 70%
+            speedReduction = (volumeToCapacityRatio - 0.5) * 1.0; // 20% total at 70%
+          } else {
+            // 20% reduction at 70%, then 10% reduction per 5% V/C increase
+            speedReduction = 0.2 + ((volumeToCapacityRatio - 0.7) * 2.0);
+          }
+          
+          averageSpeed = Math.max(8, freeFlowSpeed * (1 - speedReduction));
           
           // Calculate travel time: Time = Distance / Speed (convert to minutes)
           averageTravelTime = Math.round((distance / averageSpeed) * 60);
