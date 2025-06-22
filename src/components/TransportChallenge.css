@@ -403,9 +403,9 @@
 }
 
 .congestion-remark.induced-traffic {
-  background: rgba(231, 76, 60, 0.1);
-  border: 1px solid #e74c3c;
-  color: #c0392b;
+  background: rgba(155, 89, 182, 0.1);
+  border: 1px solid #9b59b6;
+  color: #8e44ad;
 }
 
 .congestion-remark.heavy-congestion {
@@ -424,6 +424,42 @@
   background: rgba(149, 165, 166, 0.1);
   border: 1px solid #95a5a6;
   color: #7f8c8d;
+}
+
+.congestion-remark.parking-warning {
+  background: rgba(231, 76, 60, 0.1);
+  border: 1px solid #e74c3c;
+  color: #c0392b;
+}
+
+.congestion-remark.parking-caution {
+  background: rgba(243, 156, 18, 0.1);
+  border: 1px solid #f39c12;
+  color: #e67e22;
+}
+
+.congestion-remark.safety-risk {
+  background: rgba(231, 76, 60, 0.15);
+  border: 1px solid #e74c3c;
+  color: #c0392b;
+}
+
+.congestion-remark.safety-caution {
+  background: rgba(231, 76, 60, 0.08);
+  border: 1px solid #e67e22;
+  color: #d35400;
+}
+
+.congestion-remark.cost-burden {
+  background: rgba(155, 89, 182, 0.12);
+  border: 1px solid #9b59b6;
+  color: #8e44ad;
+}
+
+.congestion-remark.cost-warning {
+  background: rgba(155, 89, 182, 0.08);
+  border: 1px solid #a569bd;
+  color: #9a59b6;
 }
 
 .infrastructure-box {
@@ -539,26 +575,35 @@
   border-radius: 8px;
   overflow: hidden;
   border: 2px solid #bdc3c7;
+  position: relative;
 }
 
 .parking-section {
   background: linear-gradient(45deg, #e74c3c, #c0392b);
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  padding-left: 8px;
   color: white;
   font-weight: 600;
-  font-size: 0.9em;
+  font-size: 0.8em;
+  white-space: nowrap;
+  min-width: 0;
+  position: relative;
 }
 
 .building-section {
   background: linear-gradient(45deg, #2ecc71, #27ae60);
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
+  padding-right: 8px;
   color: white;
   font-weight: 600;
-  font-size: 0.9em;
+  font-size: 0.8em;
+  white-space: nowrap;
+  min-width: 0;
+  position: relative;
 }
 
 .parking-stats {

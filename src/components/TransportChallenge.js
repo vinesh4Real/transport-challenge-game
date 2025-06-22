@@ -2,6 +2,16 @@ import React, { useState, useEffect, useCallback } from 'react';
 import './TransportChallenge.css';
 import { TRANSPORTATION_MODES, GAME_LEVELS } from '../constants/transportationData';
 
+// Helper function to format large numbers in words
+const formatLargeNumber = (num) => {
+  if (num >= 1000000) {
+    return `${(num / 1000000).toFixed(1)} million`;
+  } else if (num >= 1000) {
+    return `${(num / 1000).toFixed(0)}k`;
+  }
+  return num.toLocaleString();
+};
+
 // Traffic flow efficiency constants from Highway Capacity Manual
 const TRAFFIC_FLOW_CONSTANTS = {
   STABLE_FLOW_EFFICIENCY: 0.95, // Max throughput before instability
@@ -118,10 +128,36 @@ function TransportChallenge({ onComplete }) {
     // Calculate parking needed (carUsers is already in cars, need 1.5 spaces per car for peak)
     const parkingSpotsNeeded = Math.ceil(carUsers * 1.5);
     // Each parking spot = 320 sq ft (including driving lanes, access)
-    // Downtown core = 10 blocks × 400,000 sq ft/block = 4,000,000 sq ft total
     const parkingSpaceNeeded = parkingSpotsNeeded * 320; // sq ft
-    const totalDowntownSpace = 4000000; // sq ft
+    
+    // Calculate downtown size based on highway capacity (larger highways serve larger metro areas)
+    const totalHighwayCapacity = transportChoices
+      .filter(choice => choice.tool.type === 'highway')
+      .reduce((sum, choice) => sum + choice.tool.capacity, 0);
+    
+    // Base downtown: 4M sq ft for 2-lane highway (2,000 capacity)
+    // Scale proportionally: 24-lane highway (24,000 capacity) = 48M sq ft downtown
+    const baseDowntownSize = 4000000; // 4M sq ft base
+    const baseHighwayCapacity = 2000; // 2-lane highway capacity
+    const downtownScaleFactor = totalHighwayCapacity > 0 ? totalHighwayCapacity / baseHighwayCapacity : 1;
+    const totalDowntownSpace = Math.round(baseDowntownSize * downtownScaleFactor);
+    
     const downtownParkingPercent = Math.min(100, (parkingSpaceNeeded / totalDowntownSpace) * 100);
+
+    // Calculate safety risk and personal costs for Level 1
+    let trafficDeathsPerYear = 0;
+    let personalCostPerYear = 0;
+    
+    if (level === 1 && carUsers > 0) {
+      // Traffic deaths: ~1.33 deaths per 100 million vehicle miles traveled (NHTSA 2022)
+      // 15 miles each way × 2 trips × 250 work days = 15,000 miles/year per person
+      const totalVehicleMiles = carUsers * 15000; // 15k miles per car per year
+      trafficDeathsPerYear = (totalVehicleMiles / 100000000) * 1.33; // Deaths per year for this population
+      
+      // Personal car costs: $10,728/year average (AAA 2023)
+      // Includes: car payments, insurance, gas, maintenance, parking, registration
+      personalCostPerYear = carUsers * 10728; // Total cost burden on population
+    }
 
           // Calculate transit/active users for stats display
       const peakHourPeople = peakHourCars * 1.2;
@@ -229,6 +265,9 @@ function TransportChallenge({ onComplete }) {
         peoplePerHour: peoplePerHour,
         averageSpeed: Math.round(averageSpeed),
         volumeCapacityRatio: Math.round(volumeCapacityRatio * 100) / 100, // Round to 2 decimal places
+        // Safety and cost impacts for Level 1
+        trafficDeathsPerYear: Math.round(trafficDeathsPerYear * 100) / 100, // Round to 2 decimal places
+        personalCostPerYear: personalCostPerYear,
         // Speed calculation details for modal
         speedCalculation: level === 1 && transportChoices.length > 0 ? {
           volume: carUsers,
@@ -333,7 +372,7 @@ function TransportChallenge({ onComplete }) {
               className="stat-detail parking-tooltip" 
               title={`${stats.parkingSpotsNeeded?.toLocaleString()} parking spots × 320 sq ft each`}
             >
-              {stats.parkingSpaceNeeded?.toLocaleString()} sq ft needed
+              {formatLargeNumber(stats.parkingSpaceNeeded)} sq ft needed
             </div>
           </div>
           <div className="stat">
@@ -459,6 +498,42 @@ function TransportChallenge({ onComplete }) {
                     ✅ <strong>Good Flow:</strong> Efficient transportation with {stats.averageTravelTime}min travel time
                   </div>
                 )}
+                
+                {/* Parking Space Warning */}
+                {stats.averageTravelTime !== 999 && level === 1 && stats.downtownParking > 5 && (
+                  <div className="congestion-remark parking-warning">
+                    🅿️ <strong>Parking Crisis:</strong> Cars need {formatLargeNumber(stats.parkingSpaceNeeded)} sq ft ({Math.round(stats.downtownParking)}% of downtown)!
+                  </div>
+                )}
+                {stats.averageTravelTime !== 999 && level === 1 && stats.downtownParking > 2 && stats.downtownParking <= 5 && (
+                  <div className="congestion-remark parking-caution">
+                    ⚠️ <strong>Parking Alert:</strong> Cars consume {formatLargeNumber(stats.parkingSpaceNeeded)} sq ft of valuable downtown space
+                  </div>
+                )}
+                
+                {/* Safety Risk Warning */}
+                {stats.averageTravelTime !== 999 && level === 1 && stats.trafficDeathsPerYear > 1 && (
+                  <div className="congestion-remark safety-risk">
+                    💀 <strong>Safety Risk:</strong> Car dependency causes ~{Math.round(stats.trafficDeathsPerYear)} traffic deaths per year for this population
+                  </div>
+                )}
+                {stats.averageTravelTime !== 999 && level === 1 && stats.trafficDeathsPerYear > 0.1 && stats.trafficDeathsPerYear <= 1 && (
+                  <div className="congestion-remark safety-caution">
+                    ⚠️ <strong>Traffic Risk:</strong> ~{stats.trafficDeathsPerYear.toFixed(1)} expected traffic deaths per year
+                  </div>
+                )}
+                
+                {/* Personal Cost Warning */}
+                {stats.averageTravelTime !== 999 && level === 1 && stats.personalCostPerYear > 50000000 && (
+                  <div className="congestion-remark cost-burden">
+                    💸 <strong>Cost Crisis:</strong> Car dependency costs this population ${formatLargeNumber(stats.personalCostPerYear)} per year
+                  </div>
+                )}
+                {stats.averageTravelTime !== 999 && level === 1 && stats.personalCostPerYear > 10000000 && stats.personalCostPerYear <= 50000000 && (
+                  <div className="congestion-remark cost-warning">
+                    💰 <strong>Cost Burden:</strong> Cars cost this population ${formatLargeNumber(stats.personalCostPerYear)} annually
+                  </div>
+                )}
               </div>
 
               {/* Infrastructure Box */}
@@ -487,10 +562,11 @@ function TransportChallenge({ onComplete }) {
             </div>
             
             <div className="corridor-section downtown">
-              <h4>🏢 Downtown Core (10 city blocks)</h4>
+              <h4>🏢 Downtown Core ({Math.round(stats.totalDowntownSpace / 400000)} city blocks)</h4>
               <div className="downtown-context">
-                <p><strong>Total space:</strong> {stats.totalDowntownSpace?.toLocaleString()} sq ft</p>
-                <p><strong>Cars need:</strong> {stats.parkingSpaceNeeded?.toLocaleString()} sq ft for parking</p>
+                <p><strong>Total space:</strong> {formatLargeNumber(stats.totalDowntownSpace)} sq ft</p>
+                <p><strong>Cars need:</strong> {formatLargeNumber(stats.parkingSpaceNeeded)} sq ft for parking</p>
+                <p><strong>Metro scale:</strong> Larger highways serve bigger metropolitan areas</p>
               </div>
               <div className="downtown-visual">
                 <div className="downtown-breakdown">
@@ -498,12 +574,12 @@ function TransportChallenge({ onComplete }) {
                     <span>🅿️ {Math.round(stats.downtownParking)}% Parking</span>
                   </div>
                   <div className="building-section" style={{width: `${100 - stats.downtownParking}%`}}>
-                    <span>🏢 {Math.round(100 - stats.downtownParking)}% Buildings</span>
+                    <span>🏙️ {Math.round(100 - stats.downtownParking)}% Other</span>
                   </div>
                 </div>
               </div>
               <div className="downtown-explanation">
-                <small>Each 1% = 40,000 sq ft</small>
+                <small>Each 1% = {formatLargeNumber(Math.round(stats.totalDowntownSpace / 100))} sq ft</small>
               </div>
             </div>
           </div>
