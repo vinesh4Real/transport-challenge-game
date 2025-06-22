@@ -79,17 +79,6 @@ export const TRANSPORTATION_MODES = {
     description: 'Ultra mega highway - 24,000 vehicles/hour (12 lanes inbound)',
     source: 'HCM 2016: 2,000 vehicles/lane/hr, one direction'
   },
-  
-  parking_lot: {
-    id: 'parking_lot',
-    name: 'Parking Lot',
-    icon: '🅿️', 
-    capacity: 0, // Parking doesn't move people
-    cost: 5000000, // $5M per downtown parking structure
-    type: 'parking',
-    description: 'Downtown parking for 500 cars',
-    source: 'Urban parking construction costs'
-  },
 
   // TRANSIT INFRASTRUCTURE  
   // Source: Real-world BRT/Light Rail operational data
@@ -208,19 +197,19 @@ export const SPACE_EFFICIENCY = {
 export const GAME_LEVELS = {
   1: {
     name: "Induced Traffic Trap",
-    goal: "Try to reduce parking by building more highways", 
-    hint: "Build more highway capacity. Watch what happens to car usage and parking demand!",
-    available_modes: ['highway_2lane', 'highway_4lane', 'highway_6lane', 'highway_8lane', 'highway_12lane', 'highway_24lane', 'parking_lot'],
+    goal: "Create an efficient transport for suburbanites to reach work downtown", 
+    hint: "Be wary of induced traffic traps, parking demands, safety, and congestion.",
+    available_modes: ['highway_2lane', 'highway_4lane', 'highway_6lane', 'highway_8lane', 'highway_12lane', 'highway_24lane'],
     target_people: 5000,
-    max_parking_percent: 100
+    max_parking_percent: 10 // Impossible with highways alone - forces realization
   },
   2: {
     name: "Transit Revolution", 
-    goal: "Move 5,000 people with <50% downtown parking",
+    goal: "Move 5,000 people with <5% downtown parking",
     hint: "Add transit options! Watch how much parking space you can free up.",
-    available_modes: ['highway_2lane', 'highway_4lane', 'highway_6lane', 'highway_8lane', 'highway_12lane', 'highway_24lane', 'parking_lot', 'light_rail', 'brt', 'express_bus', 'park_ride'],
+    available_modes: ['highway_2lane', 'highway_4lane', 'highway_6lane', 'highway_8lane', 'highway_12lane', 'highway_24lane', 'light_rail', 'brt', 'express_bus', 'park_ride'],
     target_people: 5000,
-    max_parking_percent: 50
+    max_parking_percent: 5
   },
   3: {
     name: "Complete Streets",

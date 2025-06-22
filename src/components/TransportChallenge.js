@@ -21,9 +21,10 @@ const TRAFFIC_FLOW_CONSTANTS = {
 
 function TransportChallenge({ onComplete }) {
   const [level, setLevel] = useState(1);
-  const [selectedTool, setSelectedTool] = useState(null);
   const [transportChoices, setTransportChoices] = useState([]);
+  const [selectedTool, setSelectedTool] = useState(null);
   const [showSpeedModal, setShowSpeedModal] = useState(false);
+  const [transitUnlocked, setTransitUnlocked] = useState(false); // Track if transit options are unlocked
   const [stats, setStats] = useState({
     people: 50000,
     carsUsed: 50000, // Start with everyone needing cars
@@ -48,7 +49,7 @@ function TransportChallenge({ onComplete }) {
   const levelData = {
     1: {
       ...GAME_LEVELS[1],
-      unlocked: tools[1],
+      unlocked: transitUnlocked ? [...tools[1], ...tools[2]] : tools[1], // Show transit tools if unlocked
       maxParking: GAME_LEVELS[1].max_parking_percent
     },
     2: {
@@ -194,7 +195,6 @@ function TransportChallenge({ onComplete }) {
           // Calculate actual throughput based on highway capacity
           const throughputPeople = Math.round(totalHighwayCapacity * flowEfficiency);
           peoplePerHour = Math.round(throughputPeople);
-          const throughputVehicles = Math.round(throughputPeople / 1.2);
           
           // Refined speed formula: realistic congestion curve
           const freeFlowSpeed = 65; // mph
@@ -325,7 +325,17 @@ function TransportChallenge({ onComplete }) {
     }
   };
 
+  const handleUnlockTransit = () => {
+    setTransitUnlocked(true);
+  };
+
   const canAdvanceLevel = () => {
+    // Don't allow advancement if no transportation has been built
+    if (transportChoices.length === 0) {
+      return false;
+    }
+    
+    // All levels: Must meet parking goal to advance
     return stats.downtownParking <= levelData[level].maxParking;
   };
 
@@ -336,15 +346,24 @@ function TransportChallenge({ onComplete }) {
 
   return (
     <div className="transport-challenge">
-      <div className="game-header">
+      {/* Top section: Level info on left, Goal/Hint stacked on right */}
+      <div className="top-section">
         <div className="level-info">
           <h2>Level {level}: {levelData[level].name}</h2>
+        </div>
+        <div className="level-objectives">
           <div className="level-goal">
             <strong>Goal:</strong> {levelData[level].goal}
           </div>
           <div className="level-hint">
             <strong>Hint:</strong> {levelData[level].hint}
           </div>
+        </div>
+      </div>
+
+      {/* <div className="game-header">
+        <div className="level-info">
+          <h2>Level {level}: {levelData[level].name}</h2>
         </div>
 
         <div className={`travel-time-block ${stats.averageTravelTime > 60 ? 'travel-time-bad' : stats.averageTravelTime === 999 ? 'travel-time-none' : 'travel-time-good'}`}>
@@ -384,7 +403,7 @@ function TransportChallenge({ onComplete }) {
             <div className="stat-label">💰 Total Cost</div>
           </div>
         </div>
-      </div>
+      </div> */}
 
             <div className="game-content">
         <div className="tool-palette">
@@ -633,8 +652,27 @@ function TransportChallenge({ onComplete }) {
           
           {!canAdvanceLevel() && (
             <div className="level-feedback">
-              <p>🎯 <strong>Goal not reached!</strong> You need to get downtown parking below {levelData[level].maxParking}%</p>
-              <p>Current: {Math.round(stats.downtownParking)}% parking</p>
+              {transportChoices.length === 0 ? (
+                <p>🛠️ <strong>Get Started:</strong> Select and add a transportation option from the tools above to begin!</p>
+              ) : level === 1 ? (
+                <>
+                  <p>🎯 <strong>Highway Challenge:</strong> Try different highway configurations to see what happens!</p>
+                  <p>Current: {Math.round(stats.downtownParking)}% parking (Goal: ≤{levelData[level].maxParking}%)</p>
+                  {!transitUnlocked && (
+                    <button 
+                      className="unlock-transit-btn"
+                      onClick={handleUnlockTransit}
+                    >
+                      I give up! ⚡ Give me other transit options ⚡
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p>🎯 <strong>Goal not reached!</strong> You need to get downtown parking below {levelData[level].maxParking}%</p>
+                  <p>Current: {Math.round(stats.downtownParking)}% parking</p>
+                </>
+              )}
             </div>
           )}
         </div>

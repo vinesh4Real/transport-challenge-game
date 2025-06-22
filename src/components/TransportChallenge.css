@@ -30,23 +30,66 @@
   font-weight: 700;
 }
 
+.top-section {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 30px;
+  margin-bottom: 30px;
+}
+
+.level-objectives {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 15px;
+}
+
 .level-goal, .level-hint {
-  margin: 10px 0;
-  padding: 12px;
-  border-radius: 8px;
-  line-height: 1.5;
+  margin: 0;
+  padding: 20px 25px;
+  border-radius: 16px;
+  line-height: 1.6;
+  font-size: 1.2em;
+  font-weight: 600;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  border: 3px solid;
+  position: relative;
+  animation: pulseGlow 3s ease-in-out infinite;
 }
 
 .level-goal {
-  background: rgba(52, 152, 219, 0.1);
-  border: 2px solid #3498db;
-  color: #2c3e50;
+  background: linear-gradient(135deg, rgba(52, 152, 219, 0.15) 0%, rgba(41, 128, 185, 0.2) 100%);
+  border-color: #3498db;
+  color: #1e3a8a;
+}
+
+.level-goal strong {
+  color: #2563eb;
+  font-weight: 800;
+  font-size: 1.1em;
 }
 
 .level-hint {
-  background: rgba(155, 89, 182, 0.1);
-  border: 2px solid #9b59b6;
-  color: #2c3e50;
+  background: linear-gradient(135deg, rgba(155, 89, 182, 0.15) 0%, rgba(142, 68, 173, 0.2) 100%);
+  border-color: #9b59b6;
+  color: #7c2d12;
+}
+
+.level-hint strong {
+  color: #a855f7;
+  font-weight: 800;
+  font-size: 1.1em;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 12px 35px rgba(52, 152, 219, 0.3);
+    transform: scale(1.02);
+  }
 }
 
 .travel-time-block {
@@ -697,18 +740,57 @@
 }
 
 .level-feedback {
-  background: rgba(231, 76, 60, 0.1);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 249, 250, 0.95) 100%);
   border: 2px solid #e74c3c;
-  border-radius: 12px;
-  padding: 20px;
+  border-radius: 16px;
+  padding: 30px;
   margin: 20px 0;
   text-align: center;
+  box-shadow: 0 8px 32px rgba(231, 76, 60, 0.15);
+  backdrop-filter: blur(10px);
 }
 
 .level-feedback p {
-  margin: 5px 0;
-  color: #c0392b;
+  margin: 12px 0;
+  color: #2c3e50;
   font-weight: 600;
+  font-size: 1.1em;
+  line-height: 1.6;
+}
+
+.level-feedback p strong {
+  color: #e74c3c;
+  font-weight: 700;
+}
+
+/* Center the unlock transit button */
+.unlock-transit-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  margin: 20px auto 0 auto;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.unlock-transit-btn:hover {
+  background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+  transform: translateY(-2px);
+}
+
+.unlock-transit-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 10px rgba(102, 126, 234, 0.4);
 }
 
 @media (max-width: 1200px) {
@@ -730,6 +812,21 @@
 @media (max-width: 768px) {
   .transport-challenge {
     padding: 15px;
+  }
+  
+  .top-section {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+  
+  .level-objectives {
+    gap: 15px;
+  }
+  
+  .level-goal, .level-hint {
+    font-size: 1.1em;
+    padding: 18px 20px;
   }
   
   .game-header {
