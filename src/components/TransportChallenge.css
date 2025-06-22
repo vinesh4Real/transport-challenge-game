@@ -1161,4 +1161,67 @@
   color: #7f8c8d;
   line-height: 1.4;
   font-style: italic;
+}
+
+/* BRT Fleet Controls */
+.brt-fleet-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.fleet-size-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fleet-btn {
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.8em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.fleet-btn:hover:not(:disabled) {
+  background: #2980b9;
+  transform: scale(1.05);
+}
+
+.fleet-btn:disabled {
+  background: #bdc3c7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.fleet-size {
+  font-weight: 600;
+  color: #2c3e50;
+  font-size: 0.9em;
+}
+
+.brt-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.frequency, .capacity {
+  font-size: 0.8em;
+  color: #7f8c8d;
+  font-weight: 500;
+}
+
+.frequency {
+  color: #e67e22;
+}
+
+.capacity {
+  color: #27ae60;
 } 

@@ -24,7 +24,8 @@ function TransportChallenge({ onComplete }) {
   const [transportChoices, setTransportChoices] = useState([]);
   const [selectedTool, setSelectedTool] = useState(null);
   const [showSpeedModal, setShowSpeedModal] = useState(false);
-  const [transitUnlocked, setTransitUnlocked] = useState(false); // Track if transit options are unlocked
+
+  const [brtFleetSize, setBrtFleetSize] = useState(40); // Single BRT fleet size
   const [stats, setStats] = useState({
     people: 50000,
     carsUsed: 50000, // Start with everyone needing cars
@@ -35,7 +36,14 @@ function TransportChallenge({ onComplete }) {
     efficiency: 0,
     parkingSpotsNeeded: 6251, // Will be calculated properly
     parkingSpaceNeeded: 2000000, // Will be calculated properly
-    totalDowntownSpace: 4000000 // 4M sq ft downtown
+    totalDowntownSpace: 4000000, // 4M sq ft downtown
+    averageTravelTime: 0,
+    peoplePerHour: 0,
+    vehiclesPerHour: 0,
+    averageSpeed: 0,
+    volumeCapacityRatio: 0,
+    trafficDeathsPerYear: 0,
+    personalCostPerYear: 0
   });
 
   // Build tools object from verified transportation data constants
@@ -49,7 +57,7 @@ function TransportChallenge({ onComplete }) {
   const levelData = {
     1: {
       ...GAME_LEVELS[1],
-      unlocked: transitUnlocked ? [...tools[1], ...tools[2]] : tools[1], // Show transit tools if unlocked
+      unlocked: tools[1], // Only Level 1 tools
       maxParking: GAME_LEVELS[1].max_parking_percent
     },
     2: {
@@ -99,6 +107,47 @@ function TransportChallenge({ onComplete }) {
           averageDailyTraffic = 225000; // 24-lane induces ultra extreme regional traffic
         }
         // 2-lane stays at 60,000
+      }
+
+      // BRT modal split calculations (Level 2+)
+      const brtChoices = transportChoices.filter(choice => choice.tool.id === 'brt');
+      console.log('BRT Debug:', { 
+        brtChoices: brtChoices.length, 
+        level, 
+        transportChoices: transportChoices.map(c => c.tool.id),
+        brtFleetSize 
+      });
+      
+      if (brtChoices.length > 0 && level >= 2) {
+        // BRT calculations based on fleet size
+        const frequency = Math.ceil(118 / brtFleetSize); // minutes between buses
+        const busesPerHour = Math.floor(60 / frequency);
+        
+        // Load factors: Peak (1.0) vs Off-peak (0.689)
+        const peakCapacityPerHour = busesPerHour * 160 * 1.0; // 160 passengers per articulated bus
+        const offPeakCapacityPerHour = busesPerHour * 160 * 0.689;
+        
+        // Daily ridership: 6 peak hours + 10 off-peak hours
+        const dailyRidership = (peakCapacityPerHour * 6) + (offPeakCapacityPerHour * 10);
+        
+        // Modal split: 75% from cars, 25% induced demand
+        const carTripsRemoved = (dailyRidership * 0.75) / 1.2; // 1.2 people per car
+        
+        // Debug logging
+        console.log('BRT Calculations:', {
+          brtFleetSize,
+          frequency,
+          busesPerHour,
+          peakCapacityPerHour,
+          offPeakCapacityPerHour,
+          dailyRidership,
+          carTripsRemoved,
+          originalADT: averageDailyTraffic,
+          newADT: Math.max(0, averageDailyTraffic - carTripsRemoved)
+        });
+        
+        // Reduce ADT by car trips removed
+        averageDailyTraffic = Math.max(0, averageDailyTraffic - carTripsRemoved);
       }
       
       const peakHourCars = Math.round(averageDailyTraffic * 0.07); // Peak direction = 70% of 10% peak hour traffic
@@ -326,7 +375,11 @@ function TransportChallenge({ onComplete }) {
   };
 
   const handleUnlockTransit = () => {
-    setTransitUnlocked(true);
+    setLevel(2);
+  };
+
+  const handleBrtFleetChange = (change) => {
+    setBrtFleetSize(prev => Math.max(10, Math.min(100, prev + change)));
   };
 
   const canAdvanceLevel = () => {
@@ -485,9 +538,15 @@ function TransportChallenge({ onComplete }) {
                     </div>
                   </div>
                   <div className="stat-item">
-                    <span className="stat-label">{level === 1 ? 'Vehicles/Hour:' : 'People/Hour:'}</span>
-                    <span className="stat-value">{level === 1 ? Math.round(stats.peoplePerHour / 1.2)?.toLocaleString() : stats.peoplePerHour?.toLocaleString()}</span>
+                    <span className="stat-label">People/Hour:</span>
+                    <span className="stat-value">{stats.peoplePerHour?.toLocaleString()}</span>
                   </div>
+                  {transportChoices.some(choice => choice.tool.type === 'highway') && (
+                    <div className="stat-item">
+                      <span className="stat-label">Vehicles/Hour:</span>
+                      <span className="stat-value">{Math.round(stats.peoplePerHour/1.2).toLocaleString()}</span>
+                    </div>
+                  )}
                   {level === 1 && stats.volumeCapacityRatio > 0 && (
                     <div className="stat-item">
                       <span className="stat-label">V/C Ratio:</span>
@@ -566,7 +625,41 @@ function TransportChallenge({ onComplete }) {
                       <div key={choice.id} className="transport-item">
                         <span className="transport-icon">{choice.tool.icon}</span>
                         <span className="transport-name">{choice.tool.name}</span>
-                        <span className="transport-capacity">{choice.tool.capacity.toLocaleString()}/hr</span>
+                        
+                        {choice.tool.id === 'brt' ? (
+                          <div className="brt-fleet-controls">
+                            <div className="fleet-size-controls">
+                              <button 
+                                className="fleet-btn"
+                                onClick={() => handleBrtFleetChange(-10)}
+                                disabled={brtFleetSize <= 10}
+                              >
+                                -10
+                              </button>
+                              <span className="fleet-size">
+                                Fleet: {brtFleetSize} buses
+                              </span>
+                              <button 
+                                className="fleet-btn"
+                                onClick={() => handleBrtFleetChange(10)}
+                                disabled={brtFleetSize >= 100}
+                              >
+                                +10
+                              </button>
+                            </div>
+                            <div className="brt-stats">
+                              <span className="frequency">
+                                Frequency: {Math.ceil(118 / brtFleetSize)} min
+                              </span>
+                              <span className="capacity">
+                                {Math.floor(60 / Math.ceil(118 / brtFleetSize)) * 160} peak capacity/hr
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="transport-capacity">{choice.tool.capacity.toLocaleString()}/hr</span>
+                        )}
+                        
                         <button 
                           className="remove-transport"
                           onClick={() => handleRemoveChoice(choice.id)}
@@ -658,7 +751,7 @@ function TransportChallenge({ onComplete }) {
                 <>
                   <p>🎯 <strong>Highway Challenge:</strong> Try different highway configurations to see what happens!</p>
                   <p>Current: {Math.round(stats.downtownParking)}% parking (Goal: ≤{levelData[level].maxParking}%)</p>
-                  {!transitUnlocked && (
+                  {level === 1 && (
                     <button 
                       className="unlock-transit-btn"
                       onClick={handleUnlockTransit}
