@@ -1,0 +1,6 @@
+.App {
+  text-align: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #87CEEB 0%, #98FB98 50%, #FFD700 100%);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+} 
