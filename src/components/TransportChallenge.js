@@ -19,6 +19,30 @@ const TRAFFIC_FLOW_CONSTANTS = {
   OVERCAPACITY_THRESHOLD: 1.0 // V/C ratio where breakdown occurs
 };
 
+// Helper function to calculate vehicle speed based on V/C ratio
+const calculateVehicleSpeed = (vehicleVolume, vehicleCapacity) => {
+  if (vehicleCapacity === 0) return 0;
+  
+  const vcRatio = vehicleVolume / vehicleCapacity;
+  const freeFlowSpeed = 65; // mph
+  
+  let speedReduction = 0;
+  if (vcRatio <= 0.5) {
+    speedReduction = 0; // No congestion below 50%
+  } else if (vcRatio <= 0.7) {
+    // 5% reduction per 5% V/C increase from 50% to 70%
+    // (0.7 - 0.5) = 0.2 range, want 20% total reduction
+    // So multiply by 100 to get percentage (0.2 * 100 = 20%)
+    speedReduction = (vcRatio - 0.5) * 100 * 0.01; // Convert to decimal
+  } else {
+    // 20% reduction at 70%, then 10% reduction per 5% V/C increase
+    // Each 0.05 increase = 10% more reduction = multiply by 200
+    speedReduction = 0.2 + ((vcRatio - 0.7) * 200 * 0.01);
+  }
+  
+  return Math.max(8, freeFlowSpeed * (1 - speedReduction));
+};
+
 function TransportChallenge({ onComplete }) {
   const [level, setLevel] = useState(1);
   const [transportChoices, setTransportChoices] = useState([]);
@@ -30,7 +54,7 @@ function TransportChallenge({ onComplete }) {
     people: 50000,
     carsUsed: 50000, // Start with everyone needing cars
     transitUsed: 0,
-    activeUsed: 0,
+    activeUsers: 0,
     downtownParking: 100, // Will be calculated properly based on space
     cost: 0,
     efficiency: 0,
@@ -76,6 +100,7 @@ function TransportChallenge({ onComplete }) {
     let totalCost = 0;
     let transitCapacity = 0;
     let activeCapacity = 0;
+    let totalBRTUsers = 0; // Declare early to avoid initialization errors
 
     transportChoices.forEach(choice => {
       totalCost += choice.tool.cost;
@@ -129,6 +154,7 @@ function TransportChallenge({ onComplete }) {
         
         // Daily ridership: 6 peak hours + 10 off-peak hours
         const dailyRidership = (peakCapacityPerHour * 6) + (offPeakCapacityPerHour * 10);
+        totalBRTUsers = dailyRidership;
         
         // Modal split: 75% from cars, 25% induced demand
         const carTripsRemoved = (dailyRidership * 0.75) / 1.2; // 1.2 people per car
@@ -149,34 +175,42 @@ function TransportChallenge({ onComplete }) {
         // Reduce ADT by car trips removed
         averageDailyTraffic = Math.max(0, averageDailyTraffic - carTripsRemoved);
       }
-      
-      const peakHourCars = Math.round(averageDailyTraffic * 0.07); // Peak direction = 70% of 10% peak hour traffic
-      
-      // Level 1: Induced traffic - minimum highway needed, but more capacity attracts more users
-    let carUsers;
-          if (level === 1) {
-      const totalHighwayVehicleCapacity = transportChoices
-        .filter(choice => choice.tool.type === 'highway')
-        .reduce((sum, choice) => sum + choice.tool.capacity, 0);
-      
-              if (totalHighwayVehicleCapacity === 0) {
-          // No highway = the ~6,700 peak hour cars can't get downtown at all
-          carUsers = 0;
-        } else {
-          // All peak hour cars need to get downtown (ADT already includes induced demand)
-          carUsers = peakHourCars;
-        }
+    
+    // Unified vehicle and people counting system
+    const peakHourVehicles = Math.round(averageDailyTraffic * 0.07); // Peak direction = 70% of 10% peak hour traffic
+    const peakHourPeople = peakHourVehicles * 1.2; // Convert vehicles to people
+    
+    // Get highway capacity for all levels
+    const totalHighwayVehicleCapacity = transportChoices
+      .filter(choice => choice.tool.type === 'highway')
+      .reduce((sum, choice) => sum + choice.tool.capacity, 0);
+    
+    // Calculate modal split consistently across all levels
+    let vehiclesUsed, peakHourBRTUsers, nonCarUsers;
+    
+    if (level === 1) {
+      // Level 1: Only cars, no transit/active options
+      if (totalHighwayVehicleCapacity === 0) {
+        // No highway = no vehicles can get downtown
+        vehiclesUsed = 0;
+        peakHourBRTUsers = 0;
+        nonCarUsers = 0;
+      } else {
+        // All peak hour vehicles need to get downtown
+        vehiclesUsed = peakHourVehicles;
+        peakHourBRTUsers = 0;
+        nonCarUsers = 0;
+      }
     } else {
-              // Normal calculation for levels 2-3 (convert back to people for transit/active)
-        const peakHourPeople = peakHourCars * 1.2;
-        const transitUsers = Math.min(transitCapacity * 0.6, peakHourPeople * 0.8);
-        const activeUsers = Math.min(activeCapacity * 0.8, (peakHourPeople - transitUsers) * 0.5);
-        const remainingPeople = Math.max(0, peakHourPeople - transitUsers - activeUsers);
-        carUsers = Math.round(remainingPeople / 1.2); // Convert back to cars
+      // Levels 2-3: Calculate modal split with transit/active options
+      peakHourBRTUsers = Math.min(transitCapacity * 0.6, peakHourPeople * 0.8);
+      nonCarUsers = Math.min(activeCapacity * 0.8, (peakHourPeople - peakHourBRTUsers) * 0.5);
+      const remainingPeople = Math.max(0, peakHourPeople - peakHourBRTUsers - nonCarUsers);
+      vehiclesUsed = Math.round(remainingPeople / 1.2); // Convert back to vehicles
     }
     
-    // Calculate parking needed (carUsers is already in cars, need 1.5 spaces per car for peak)
-    const parkingSpotsNeeded = Math.ceil(carUsers * 1.5);
+    // Calculate parking needed (vehiclesUsed is already in vehicles, need 1.5 spaces per vehicle for peak)
+    const parkingSpotsNeeded = Math.ceil(vehiclesUsed * 1.5);
     // Each parking spot = 320 sq ft (including driving lanes, access)
     const parkingSpaceNeeded = parkingSpotsNeeded * 320; // sq ft
     
@@ -198,134 +232,150 @@ function TransportChallenge({ onComplete }) {
     let trafficDeathsPerYear = 0;
     let personalCostPerYear = 0;
     
-    if (level === 1 && carUsers > 0) {
+    if (level === 1 && vehiclesUsed > 0) {
       // Traffic deaths: ~1.33 deaths per 100 million vehicle miles traveled (NHTSA 2022)
       // 15 miles each way × 2 trips × 250 work days = 15,000 miles/year per person
-      const totalVehicleMiles = carUsers * 15000; // 15k miles per car per year
+      const totalVehicleMiles = vehiclesUsed * 15000; // 15k miles per car per year
       trafficDeathsPerYear = (totalVehicleMiles / 100000000) * 1.33; // Deaths per year for this population
       
       // Personal car costs: $10,728/year average (AAA 2023)
       // Includes: car payments, insurance, gas, maintenance, parking, registration
-      personalCostPerYear = carUsers * 10728; // Total cost burden on population
+      personalCostPerYear = vehiclesUsed * 10728; // Total cost burden on population
     }
 
-          // Calculate transit/active users for stats display
-      const peakHourPeople = peakHourCars * 1.2;
-      const transitUsersDisplay = level === 1 ? 0 : Math.min(transitCapacity * 0.6, peakHourPeople * 0.8);
-      const activeUsersDisplay = level === 1 ? 0 : Math.min(activeCapacity * 0.8, (peakHourPeople - transitUsersDisplay) * 0.5);
-      
-      // Calculate travel time and throughput efficiency based on actual lane performance
-      let averageTravelTime = 60; // minutes, base case
-      let peoplePerHour = 0;
-      let averageSpeed = 0; // mph
-      
-      const distance = 15; // miles
-      
-      if (level === 1) {
-        const highwayChoices = transportChoices.filter(choice => choice.tool.type === 'highway');
+    // Transit and active users are already calculated above, no need to recalculate
+    
+    // Calculate travel time and throughput efficiency
+    let averageTravelTime = 60; // minutes, base case
+    let peoplePerHour = 0;
+    let vehiclesPerHour = 0;
+    let vehicleAvgSpeed = 0; // mph
+    let brtAvgSpeed = 0; // mph
+    let primaryModeSpeed = 0; // Speed of primary mode
+    
+    const distance = 15; // miles
+    
+    // Get transport choices by type
+    const transitChoices = transportChoices.filter(choice => choice.tool.type === 'transit');
+    const activeChoices = transportChoices.filter(choice => choice.tool.type === 'active');
+    
+    if (totalHighwayVehicleCapacity === 0 && transitChoices.length === 0 && activeChoices.length === 0) {
+      // No transportation infrastructure
+      averageTravelTime = 999; // Can't get there
+      peoplePerHour = 0;
+      vehiclesPerHour = 0;
+    } else {
+      // Calculate highway vehicle throughput and speed if highways exist
+      if (totalHighwayVehicleCapacity > 0) {
+        // For V/C ratio, use peak hour vehicle demand to show traffic pressure
+        const volumeToCapacityRatio = peakHourVehicles / totalHighwayVehicleCapacity;
         
-        if (highwayChoices.length === 0) {
-          averageTravelTime = 999; // Can't get there
-          peoplePerHour = 0;
-          averageSpeed = 0;
-        } else {
-          // Calculate capacity and V/C ratio
-          const totalHighwayVehicleCapacity = highwayChoices.reduce((sum, choice) => sum + choice.tool.capacity, 0);
-          const totalHighwayCapacity = totalHighwayVehicleCapacity * 1.2; // Convert vehicles to people (1.2 people/car)
-          
-          // Use V/C ratio based on vehicle capacity for determining flow efficiency
-          const volumeToCapacityRatio = carUsers / totalHighwayVehicleCapacity;
-          
-          // Determine flow efficiency based on V/C ratio
-          const flowEfficiency = volumeToCapacityRatio > TRAFFIC_FLOW_CONSTANTS.OVERCAPACITY_THRESHOLD 
-            ? TRAFFIC_FLOW_CONSTANTS.BREAKDOWN_FLOW_EFFICIENCY 
-            : TRAFFIC_FLOW_CONSTANTS.STABLE_FLOW_EFFICIENCY;
-          
-          // Calculate actual throughput based on highway capacity
-          const throughputPeople = Math.round(totalHighwayCapacity * flowEfficiency);
-          peoplePerHour = Math.round(throughputPeople);
-          
-          // Refined speed formula: realistic congestion curve
-          const freeFlowSpeed = 65; // mph
-          let speedReduction = 0;
-          
-          if (volumeToCapacityRatio <= 0.5) {
-            speedReduction = 0; // No congestion below 50%
-          } else if (volumeToCapacityRatio <= 0.7) {
-            // 5% reduction per 5% V/C increase from 50% to 70%
-            speedReduction = (volumeToCapacityRatio - 0.5) * 1.0; // 20% total at 70%
-          } else {
-            // 20% reduction at 70%, then 10% reduction per 5% V/C increase
-            speedReduction = 0.2 + ((volumeToCapacityRatio - 0.7) * 2.0);
-          }
-          
-          averageSpeed = Math.max(8, freeFlowSpeed * (1 - speedReduction));
-          
-          // Calculate travel time: Time = Distance / Speed (convert to minutes)
-          averageTravelTime = Math.round((distance / averageSpeed) * 60);
-        }
-      } else {
-        // For transit/active levels, use different speed calculations
-        const totalCapacity = transitCapacity + activeCapacity + transportChoices
-          .filter(choice => choice.tool.type === 'highway')
-          .reduce((sum, choice) => sum + choice.tool.capacity, 0);
+        // Determine flow efficiency based on V/C ratio
+        const flowEfficiency = volumeToCapacityRatio > TRAFFIC_FLOW_CONSTANTS.OVERCAPACITY_THRESHOLD 
+          ? TRAFFIC_FLOW_CONSTANTS.BREAKDOWN_FLOW_EFFICIENCY 
+          : TRAFFIC_FLOW_CONSTANTS.STABLE_FLOW_EFFICIENCY;
         
-        // Transit average speeds (including stops, transfers)
-        const transitChoices = transportChoices.filter(choice => choice.tool.type === 'transit');
-        const activeChoices = transportChoices.filter(choice => choice.tool.type === 'active');
+        // Calculate actual throughput
+        vehiclesPerHour = Math.round(totalHighwayVehicleCapacity * flowEfficiency);
         
-        if (transitChoices.length > 0) {
-          averageSpeed = 35; // BRT/Light Rail average speed including stops
-          averageTravelTime = Math.round((distance / averageSpeed) * 60);
-        } else if (activeChoices.length > 0) {
-          averageSpeed = 12; // Bike average speed
-          averageTravelTime = Math.round((distance / averageSpeed) * 60);
-        } else {
-          averageSpeed = 25; // Mixed traffic
-          averageTravelTime = Math.round((distance / averageSpeed) * 60);
-        }
-        
-        peoplePerHour = totalCapacity;
+        // Calculate vehicle speed using helper function
+        // Use peakHourVehicles (peak hour demand) as volume
+        vehicleAvgSpeed = calculateVehicleSpeed(peakHourVehicles, totalHighwayVehicleCapacity);
       }
+      
+      // Calculate BRT speed if present
+      if (transitChoices.some(choice => choice.tool.id === 'brt') && peakHourBRTUsers > 0) {
+        brtAvgSpeed = 27; // BRT average speed with stops
+      }
+      
+      // Determine primary mode speed and travel time
+      if (transitChoices.length > 0 && peakHourBRTUsers > 0) {
+        // Transit is primary mode
+        primaryModeSpeed = brtAvgSpeed || 27;
+        averageTravelTime = Math.round((distance / primaryModeSpeed) * 60);
+      } else if (activeChoices.length > 0 && nonCarUsers > 0) {
+        // Active transport is primary mode
+        primaryModeSpeed = 12; // Bike average speed
+        averageTravelTime = Math.round((distance / primaryModeSpeed) * 60);
+      } else if (totalHighwayVehicleCapacity > 0) {
+        // Highway is primary mode
+        primaryModeSpeed = vehicleAvgSpeed;
+        averageTravelTime = Math.round((distance / primaryModeSpeed) * 60);
+      }
+      
+      // Calculate total people moved per hour
+      const transitPeoplePerHour = peakHourBRTUsers;
+      const activePeoplePerHour = nonCarUsers;
+      const vehiclePeoplePerHour = vehiclesUsed * 1.2;
+      peoplePerHour = Math.round(transitPeoplePerHour + activePeoplePerHour + vehiclePeoplePerHour);
+      
+      // If vehiclesPerHour wasn't calculated (no highways), use vehiclesUsed as the hourly rate
+      if (vehiclesPerHour === 0 && vehiclesUsed > 0) {
+        vehiclesPerHour = vehiclesUsed;
+      }
+    }
 
       // Calculate V/C ratio for display
       let volumeCapacityRatio = 0;
-      if (level === 1 && transportChoices.length > 0) {
+      if (transportChoices.length > 0) {
         const totalHighwayVehicleCapacity = transportChoices
           .filter(choice => choice.tool.type === 'highway')
           .reduce((sum, choice) => sum + choice.tool.capacity, 0);
-        volumeCapacityRatio = totalHighwayVehicleCapacity > 0 ? carUsers / totalHighwayVehicleCapacity : 0;
+        // Use peakHourVehicles (demand) not vehiclesUsed (after modal split) for V/C ratio
+        volumeCapacityRatio = totalHighwayVehicleCapacity > 0 ? peakHourVehicles / totalHighwayVehicleCapacity : 0;
       }
 
       const newStats = {
-        people: peakHourPeople, // People count for internal tracking
-        cars: peakHourCars, // Cars count for Level 1 display
-        adt: averageDailyTraffic, // ADT for display
-        carsUsed: carUsers,
-        transitUsed: transitUsersDisplay,
-        activeUsed: activeUsersDisplay,
+        // Population counts
+        people: peakHourPeople,
+        peakHourPeople: peakHourPeople,
+        adt: averageDailyTraffic,
+        
+        // Vehicle/Car specific stats
+        cars: peakHourVehicles, // For Level 1 display compatibility
+        carsUsed: vehiclesUsed, // deprecated, use vehiclesUsed
+        vehiclesUsed: vehiclesUsed,
+        peakHourVehicles: peakHourVehicles,
+        vehicleAvgSpeed: Math.round(vehicleAvgSpeed),
+        vehiclesPerHour: vehiclesPerHour,
+        
+        // Transit specific stats (BRT)
+        transitUsed: peakHourBRTUsers, // Generic for backwards compatibility
+        peakHourBRTUsers: peakHourBRTUsers,
+        totalBRTUsers: Math.round(totalBRTUsers),
+        brtAvgSpeed: Math.round(brtAvgSpeed),
+        
+        // Active transport specific stats
+        activeUsers: nonCarUsers, // deprecated, use nonCarUsers
+        nonCarUsers: nonCarUsers,
+        
+        // Infrastructure and space stats
         downtownParking: downtownParkingPercent,
-        cost: totalCost,
-        efficiency: Math.round((transitUsersDisplay + activeUsersDisplay) / peakHourPeople * 100),
         parkingSpotsNeeded: parkingSpotsNeeded,
         parkingSpaceNeeded: parkingSpaceNeeded,
         totalDowntownSpace: totalDowntownSpace,
+        
+        // Cost and efficiency stats
+        cost: totalCost,
+        efficiency: Math.round((peakHourBRTUsers + nonCarUsers) / peakHourPeople * 100),
+        
+        // Performance stats
         averageTravelTime: averageTravelTime,
         peoplePerHour: peoplePerHour,
-        averageSpeed: Math.round(averageSpeed),
-        volumeCapacityRatio: Math.round(volumeCapacityRatio * 100) / 100, // Round to 2 decimal places
-        // Safety and cost impacts for Level 1
-        trafficDeathsPerYear: Math.round(trafficDeathsPerYear * 100) / 100, // Round to 2 decimal places
+        primaryModeSpeed: Math.round(primaryModeSpeed),
+        volumeCapacityRatio: Math.round(volumeCapacityRatio * 100) / 100,
+        
+        // Safety and personal cost impacts
+        trafficDeathsPerYear: Math.round(trafficDeathsPerYear * 100) / 100,
         personalCostPerYear: personalCostPerYear,
+        
         // Speed calculation details for modal
-        speedCalculation: level === 1 && transportChoices.length > 0 ? {
-          volume: carUsers,
-          throughput: Math.round(peoplePerHour / 1.2),
+        speedCalculation: totalHighwayVehicleCapacity > 0 ? {
+          volume: peakHourVehicles, // Peak hour vehicle demand
+          throughput: vehiclesPerHour,
           freeFlowSpeed: 65,
-          formula: `max(8, 65 × (1 - ${carUsers}/${Math.round(peoplePerHour / 1.2)}))`,
-          // Capacity breakdown details - all in vehicles for Level 1
-          theoreticalCapacity: transportChoices.filter(choice => choice.tool.type === 'highway')
-            .reduce((sum, choice) => sum + choice.tool.capacity, 0),
+          formula: `max(8, 65 × (1 - ${peakHourVehicles}/${vehiclesPerHour}))`,
+          theoreticalCapacity: totalHighwayVehicleCapacity,
           flowEfficiency: volumeCapacityRatio > TRAFFIC_FLOW_CONSTANTS.OVERCAPACITY_THRESHOLD 
             ? TRAFFIC_FLOW_CONSTANTS.BREAKDOWN_FLOW_EFFICIENCY 
             : TRAFFIC_FLOW_CONSTANTS.STABLE_FLOW_EFFICIENCY,
@@ -334,7 +384,7 @@ function TransportChallenge({ onComplete }) {
       };
 
     setStats(newStats);
-  }, [transportChoices, level]);
+  }, [transportChoices, level, brtFleetSize]);
 
   useEffect(() => {
     calculateStats();
@@ -503,7 +553,8 @@ function TransportChallenge({ onComplete }) {
                              <div className="suburb-context">
                  <p><strong>Multiple Suburbs:</strong> {stats.adt?.toLocaleString()} ADT from all suburban areas to downtown</p>
                  <p><strong>Distance:</strong> 15 miles average to downtown core</p>
-                 <p><strong>Peak Hour:</strong> {level === 1 ? `${stats.cars?.toLocaleString()} cars` : `${stats.people?.toLocaleString()} people`} travel during rush hour</p>
+                 <p><strong>Peak Hour Car Traffic:</strong> {`${Math.round(stats.peakHourVehicles * 1.2)?.toLocaleString()} people traveling by ${stats.peakHourVehicles?.toLocaleString()} personal vehicles`}.</p>
+                 <p><strong>Peak Hour Transit Traffic:</strong> {`${stats.peakHourBRTUsers?.toLocaleString()} people using BRT`}.</p>
                </div>
               <div className="suburb-visual">🏠🏠🏠🏠🏠</div>
             </div>
@@ -521,10 +572,12 @@ function TransportChallenge({ onComplete }) {
                     </span>
                   </div>
                   <div className="stat-item">
-                    <span className="stat-label">Speed:</span>
+                    <span className="stat-label">
+                      {transportChoices.some(choice => choice.tool.type === 'highway') ? 'Veh-Speed:' : 'Speed:'}
+                    </span>
                     <div className="stat-value-with-button">
                       <span className="stat-value">
-                        {stats.averageTravelTime === 999 ? 'N/A' : `${stats.averageSpeed} mph`}
+                        {stats.averageTravelTime === 999 ? 'N/A' : `${stats.vehicleAvgSpeed} mph`}
                       </span>
                       {stats.speedCalculation && (
                         <button 
@@ -537,22 +590,26 @@ function TransportChallenge({ onComplete }) {
                       )}
                     </div>
                   </div>
+                  {transportChoices.some(choice => choice.tool.id === 'brt') && (
+                    <div className="stat-item">
+                      <span className="stat-label">BRT-Speed:</span>
+                      <span className="stat-value">{stats.brtAvgSpeed} mph</span>
+                    </div>
+                  )}
                   <div className="stat-item">
                     <span className="stat-label">People/Hour:</span>
-                    <span className="stat-value">{stats.peoplePerHour?.toLocaleString()}</span>
+                    <span className="stat-value">{stats.peoplePerHour}</span>
                   </div>
                   {transportChoices.some(choice => choice.tool.type === 'highway') && (
                     <div className="stat-item">
                       <span className="stat-label">Vehicles/Hour:</span>
-                      <span className="stat-value">{Math.round(stats.peoplePerHour/1.2).toLocaleString()}</span>
+                      <span className="stat-value">{stats.vehiclesPerHour.toLocaleString()}</span>
                     </div>
                   )}
-                  {level === 1 && stats.volumeCapacityRatio > 0 && (
-                    <div className="stat-item">
-                      <span className="stat-label">V/C Ratio:</span>
-                      <span className="stat-value">{stats.volumeCapacityRatio}</span>
-                    </div>
-                  )}
+                  <div className="stat-item">
+                    <span className="stat-label">V/C Ratio:</span>
+                    <span className="stat-value">{stats.volumeCapacityRatio}</span>
+                  </div>
                 </div>
                 
                 {/* Congestion Remarks */}
@@ -704,10 +761,10 @@ function TransportChallenge({ onComplete }) {
                 <div className="split-visual">
                   <div 
                     className="split-fill cars"
-                    style={{width: `${(stats.carsUsed / stats.people) * 100}%`}}
+                    style={{width: `${(stats.vehiclesUsed * 1.2 / stats.peakHourPeople) * 100}%`}}
                   ></div>
                 </div>
-                <div className="split-value">{Math.round((stats.carsUsed / stats.people) * 100)}%</div>
+                <div className="split-value">{Math.round((stats.vehiclesUsed * 1.2 / stats.peakHourPeople) * 100)}%</div>
               </div>
               
               <div className="split-bar">
@@ -715,10 +772,10 @@ function TransportChallenge({ onComplete }) {
                 <div className="split-visual">
                   <div 
                     className="split-fill transit"
-                    style={{width: `${(stats.transitUsed / stats.people) * 100}%`}}
+                    style={{width: `${(stats.peakHourBRTUsers / stats.peakHourPeople) * 100}%`}}
                   ></div>
                 </div>
-                <div className="split-value">{Math.round((stats.transitUsed / stats.people) * 100)}%</div>
+                <div className="split-value">{Math.round((stats.peakHourBRTUsers / stats.peakHourPeople) * 100)}%</div>
               </div>
               
               <div className="split-bar">
@@ -726,10 +783,10 @@ function TransportChallenge({ onComplete }) {
                 <div className="split-visual">
                   <div 
                     className="split-fill active"
-                    style={{width: `${((stats.activeUsed || 0) / stats.people) * 100}%`}}
+                    style={{width: `${((stats.nonCarUsers || 0) / stats.peakHourPeople) * 100}%`}}
                   ></div>
                 </div>
-                <div className="split-value">{Math.round(((stats.activeUsed || 0) / stats.people) * 100)}%</div>
+                <div className="split-value">{Math.round(((stats.nonCarUsers || 0) / stats.peakHourPeople) * 100)}%</div>
               </div>
             </div>
           </div>
