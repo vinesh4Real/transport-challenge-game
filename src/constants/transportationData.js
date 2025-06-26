@@ -10,73 +10,28 @@
 // Active transport: NACTO Urban Bikeway Design Guide, AASHTO standards
 // Note: Costs are approximate and vary significantly by location, terrain, and project complexity
 
+// Configuration for highway-induced traffic
+export const HIGHWAY_INDUCED_TRAFFIC = {
+  2: 60000,   // 2-lane: 60,000 ADT
+  4: 80000,   // 4-lane: 80,000 ADT
+  6: 100000,  // 6-lane: 100,000 ADT
+  8: 125000,  // 8-lane: 125,000 ADT
+  12: 170000, // 12-lane: 170,000 ADT
+  24: 225000  // 24-lane: 225,000 ADT
+};
+
 export const TRANSPORTATION_MODES = {
   // HIGHWAY INFRASTRUCTURE
   // Source: Highway Capacity Manual (HCM 2016) - 1,900-2,300 vehicles/hour/lane
   // Note: Highway capacity is in VEHICLES/HOUR, converted to people in game logic
-  highway_2lane: {
-    id: 'highway_2lane',
-    name: '2-Lane Highway',
+  highway: {
+    id: 'highway',
+    name: 'Highway',
     icon: '🛣️',
-    capacity: 2000, // 1 lane inbound × 2,000 vehicles/lane
-    cost: 10000000, // $10M per mile
+    capacity: 2000, // Base capacity per lane inbound × 2,000 vehicles/lane
+    cost: 10000000, // Base cost $10M per mile for 2 lanes
     type: 'highway',
-    description: 'Basic highway - 2,000 vehicles/hour (1 lane inbound)',
-    source: 'HCM 2016: 2,000 vehicles/lane/hr, one direction'
-  },
-  
-  highway_4lane: {
-    id: 'highway_4lane', 
-    name: '4-Lane Highway',
-    icon: '🛣️🛣️',
-    capacity: 4000, // 2 lanes inbound × 2,000 vehicles/lane
-    cost: 20000000, // $20M per mile
-    type: 'highway',
-    description: 'Wider highway - 4,000 vehicles/hour (2 lanes inbound)',
-    source: 'HCM 2016: 2,000 vehicles/lane/hr, one direction'
-  },
-  
-  highway_6lane: {
-    id: 'highway_6lane',
-    name: '6-Lane Highway', 
-    icon: '🛣️🛣️🛣️',
-    capacity: 6000, // 3 lanes inbound × 2,000 vehicles/lane
-    cost: 30000000, // $30M per mile
-    type: 'highway',
-    description: 'Major highway - 6,000 vehicles/hour (3 lanes inbound)',
-    source: 'HCM 2016: 2,000 vehicles/lane/hr, one direction'
-  },
-  
-  highway_8lane: {
-    id: 'highway_8lane',
-    name: '8-Lane Highway', 
-    icon: '🛣️🛣️🛣️🛣️',
-    capacity: 8000, // 4 lanes inbound × 2,000 vehicles/lane
-    cost: 40000000, // $40M per mile
-    type: 'highway',
-    description: 'Super highway - 8,000 vehicles/hour (4 lanes inbound)',
-    source: 'HCM 2016: 2,000 vehicles/lane/hr, one direction'
-  },
-  
-  highway_12lane: {
-    id: 'highway_12lane',
-    name: '12-Lane Highway', 
-    icon: '🛣️🛣️🛣️🛣️🛣️🛣️',
-    capacity: 12000, // 6 lanes inbound × 2,000 vehicles/lane
-    cost: 60000000, // $60M per mile
-    type: 'highway',
-    description: 'Mega highway - 12,000 vehicles/hour (6 lanes inbound)',
-    source: 'HCM 2016: 2,000 vehicles/lane/hr, one direction'
-  },
-  
-  highway_24lane: {
-    id: 'highway_24lane',
-    name: '24-Lane Highway', 
-    icon: '🛣️🛣️🛣️🛣️🛣️🛣️🛣️🛣️🛣️🛣️🛣️🛣️',
-    capacity: 24000, // 12 lanes inbound × 2,000 vehicles/lane/hr
-    cost: 120000000, // $120M per mile
-    type: 'highway',
-    description: 'Ultra mega highway - 24,000 vehicles/hour (12 lanes inbound)',
+    description: 'Adjustable highway - 2,000 vehicles/hour per lane',
     source: 'HCM 2016: 2,000 vehicles/lane/hr, one direction'
   },
 
@@ -199,7 +154,7 @@ export const GAME_LEVELS = {
     name: "Induced Traffic Trap",
     goal: "Create an efficient transport for suburbanites to reach work downtown", 
     hint: "Be wary of induced traffic traps, parking demands, safety, and congestion.",
-    available_modes: ['highway_2lane', 'highway_4lane', 'highway_6lane', 'highway_8lane', 'highway_12lane', 'highway_24lane'],
+    available_modes: ['highway'],
     target_people: 5000,
     max_parking_percent: 10 // Impossible with highways alone - forces realization
   },
@@ -207,7 +162,7 @@ export const GAME_LEVELS = {
     name: "Transit Revolution", 
     goal: "Move 5,000 people with <5% downtown parking",
     hint: "Add transit options! Watch how much parking space you can free up.",
-    available_modes: ['highway_2lane', 'highway_4lane', 'highway_6lane', 'highway_8lane', 'highway_12lane', 'highway_24lane', 'light_rail', 'brt', 'express_bus', 'park_ride'],
+    available_modes: ['highway', 'light_rail', 'brt', 'express_bus', 'park_ride'],
     target_people: 5000,
     max_parking_percent: 5
   },

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './TransportChallenge.css';
-import { TRANSPORTATION_MODES, GAME_LEVELS } from '../constants/transportationData';
+import { TRANSPORTATION_MODES, GAME_LEVELS, HIGHWAY_INDUCED_TRAFFIC } from '../constants/transportationData';
 
 // Helper function to format large numbers in words
 const formatLargeNumber = (num) => {
@@ -50,8 +50,10 @@ function TransportChallenge({ onComplete }) {
   const [showSpeedModal, setShowSpeedModal] = useState(false);
 
   const [brtFleetSize, setBrtFleetSize] = useState(40); // Single BRT fleet size
+  const [highwayLanes, setHighwayLanes] = useState(2); // Highway lanes (min 2, max 24, increment by 2)
   const [stats, setStats] = useState({
     people: 50000,
+    distance: 20,
     carsUsed: 50000, // Start with everyone needing cars
     transitUsed: 0,
     activeUsers: 0,
@@ -67,13 +69,14 @@ function TransportChallenge({ onComplete }) {
     averageSpeed: 0,
     volumeCapacityRatio: 0,
     trafficDeathsPerYear: 0,
-    personalCostPerYear: 0
+    personalCostPerYear: 0,
+    totalPeakHourTraffic: 0
   });
 
   // Build tools object from verified transportation data constants
   const tools = {
     1: GAME_LEVELS[1].available_modes.map(modeId => TRANSPORTATION_MODES[modeId]),
-    2: [...GAME_LEVELS[1].available_modes, ...GAME_LEVELS[2].available_modes.filter(mode => !GAME_LEVELS[1].available_modes.includes(mode))].map(modeId => TRANSPORTATION_MODES[modeId]),
+    2: GAME_LEVELS[2].available_modes.map(modeId => TRANSPORTATION_MODES[modeId]),
     3: GAME_LEVELS[3].available_modes.map(modeId => TRANSPORTATION_MODES[modeId])
   };
 
@@ -86,12 +89,12 @@ function TransportChallenge({ onComplete }) {
     },
     2: {
       ...GAME_LEVELS[2],
-      unlocked: [...tools[1], ...tools[2]],
+      unlocked: tools[2], // Level 2 tools already include highway
       maxParking: GAME_LEVELS[2].max_parking_percent
     },
     3: {
       ...GAME_LEVELS[3],
-      unlocked: [...tools[1], ...tools[2], ...tools[3]],
+      unlocked: tools[3], // Level 3 tools include all modes
       maxParking: GAME_LEVELS[3].max_parking_percent
     }
   };
@@ -103,7 +106,12 @@ function TransportChallenge({ onComplete }) {
     let totalBRTUsers = 0; // Declare early to avoid initialization errors
 
     transportChoices.forEach(choice => {
-      totalCost += choice.tool.cost;
+      if (choice.tool.type === 'highway') {
+        // Highway cost scales with number of lanes
+        totalCost += choice.tool.cost * (highwayLanes / 2); // Base cost is for 2 lanes
+      } else {
+        totalCost += choice.tool.cost;
+      }
       
       if (choice.tool.type === 'transit') {
         transitCapacity += choice.tool.capacity;
@@ -119,19 +127,23 @@ function TransportChallenge({ onComplete }) {
       let averageDailyTraffic = 60000; // Base ADT with 2-lane highway
       
       if (highwayChoices.length > 0) {
-        const highwayType = highwayChoices[0].tool.id;
-        if (highwayType === 'highway_4lane') {
-          averageDailyTraffic = 80000; // 4-lane induces more regional traffic
-        } else if (highwayType === 'highway_6lane') {
-          averageDailyTraffic = 100000; // 6-lane induces even more regional traffic
-        } else if (highwayType === 'highway_8lane') {
-          averageDailyTraffic = 125000; // 8-lane induces massive regional traffic
-        } else if (highwayType === 'highway_12lane') {
-          averageDailyTraffic = 170000; // 12-lane induces extreme regional traffic
-        } else if (highwayType === 'highway_24lane') {
-          averageDailyTraffic = 225000; // 24-lane induces ultra extreme regional traffic
+        // Calculate induced traffic based on number of lanes
+        if (HIGHWAY_INDUCED_TRAFFIC[highwayLanes]) {
+          // Use predefined values for standard lane counts
+          averageDailyTraffic = HIGHWAY_INDUCED_TRAFFIC[highwayLanes];
+        } else {
+          // For non-standard lane counts, interpolate
+          const sortedLanes = Object.keys(HIGHWAY_INDUCED_TRAFFIC).map(Number).sort((a, b) => a - b);
+          const lowerBound = sortedLanes.filter(lanes => lanes < highwayLanes).pop() || 2;
+          const upperBound = sortedLanes.find(lanes => lanes > highwayLanes) || 24;
+          
+          const lowerADT = HIGHWAY_INDUCED_TRAFFIC[lowerBound];
+          const upperADT = HIGHWAY_INDUCED_TRAFFIC[upperBound];
+          
+          // Linear interpolation
+          const ratio = (highwayLanes - lowerBound) / (upperBound - lowerBound);
+          averageDailyTraffic = Math.ceil(lowerADT + ratio * (upperADT - lowerADT));
         }
-        // 2-lane stays at 60,000
       }
 
       // BRT modal split calculations (Level 2+)
@@ -145,8 +157,9 @@ function TransportChallenge({ onComplete }) {
       
       if (brtChoices.length > 0 && level >= 2) {
         // BRT calculations based on fleet size
-        const frequency = Math.ceil(118 / brtFleetSize); // minutes between buses
-        const busesPerHour = Math.floor(60 / frequency);
+        // Use exact frequency for more accurate calculations
+        const frequency = 118 / brtFleetSize; // exact minutes between buses
+        const busesPerHour = 60 / frequency; // exact buses per hour
         
         // Load factors: Peak (1.0) vs Off-peak (0.689)
         const peakCapacityPerHour = busesPerHour * 160 * 1.0; // 160 passengers per articulated bus
@@ -154,7 +167,7 @@ function TransportChallenge({ onComplete }) {
         
         // Daily ridership: 6 peak hours + 10 off-peak hours
         const dailyRidership = (peakCapacityPerHour * 6) + (offPeakCapacityPerHour * 10);
-        totalBRTUsers = dailyRidership;
+        totalBRTUsers = Math.floor(dailyRidership);
         
         // Modal split: 75% from cars, 25% induced demand
         const carTripsRemoved = (dailyRidership * 0.75) / 1.2; // 1.2 people per car
@@ -173,7 +186,7 @@ function TransportChallenge({ onComplete }) {
         });
         
         // Reduce ADT by car trips removed
-        averageDailyTraffic = Math.max(0, averageDailyTraffic - carTripsRemoved);
+        averageDailyTraffic = Math.ceil(Math.max(0, averageDailyTraffic - carTripsRemoved));
       }
     
     // Unified vehicle and people counting system
@@ -181,9 +194,8 @@ function TransportChallenge({ onComplete }) {
     const peakHourPeople = peakHourVehicles * 1.2; // Convert vehicles to people
     
     // Get highway capacity for all levels
-    const totalHighwayVehicleCapacity = transportChoices
-      .filter(choice => choice.tool.type === 'highway')
-      .reduce((sum, choice) => sum + choice.tool.capacity, 0);
+    const highwayChoice = transportChoices.find(choice => choice.tool.type === 'highway');
+    const totalHighwayVehicleCapacity = highwayChoice ? (highwayLanes / 2) * 2000 : 0; // 2000 vehicles per inbound lane
     
     // Calculate modal split consistently across all levels
     let vehiclesUsed, peakHourBRTUsers, nonCarUsers;
@@ -203,7 +215,18 @@ function TransportChallenge({ onComplete }) {
       }
     } else {
       // Levels 2-3: Calculate modal split with transit/active options
-      peakHourBRTUsers = Math.min(transitCapacity * 0.6, peakHourPeople * 0.8);
+      // For BRT, use actual peak hour capacity based on fleet size
+      let actualPeakHourBRTCapacity = 0;
+      if (brtChoices.length > 0) {
+        const frequency = 118 / brtFleetSize;
+        const busesPerHour = 60 / frequency;
+        actualPeakHourBRTCapacity = busesPerHour * 160 * 1.0; // Peak hour capacity
+      }
+      
+      // Use actual BRT capacity if available, otherwise use generic transit capacity
+      const effectiveTransitCapacity = brtChoices.length > 0 ? actualPeakHourBRTCapacity : transitCapacity;
+      
+      peakHourBRTUsers = Math.floor(Math.min(effectiveTransitCapacity * 0.6, peakHourPeople * 0.8));
       nonCarUsers = Math.min(activeCapacity * 0.8, (peakHourPeople - peakHourBRTUsers) * 0.5);
       const remainingPeople = Math.max(0, peakHourPeople - peakHourBRTUsers - nonCarUsers);
       vehiclesUsed = Math.round(remainingPeople / 1.2); // Convert back to vehicles
@@ -215,9 +238,7 @@ function TransportChallenge({ onComplete }) {
     const parkingSpaceNeeded = parkingSpotsNeeded * 320; // sq ft
     
     // Calculate downtown size based on highway capacity (larger highways serve larger metro areas)
-    const totalHighwayCapacity = transportChoices
-      .filter(choice => choice.tool.type === 'highway')
-      .reduce((sum, choice) => sum + choice.tool.capacity, 0);
+    const totalHighwayCapacity = totalHighwayVehicleCapacity; // Use the already calculated value
     
     // Base downtown: 4M sq ft for 2-lane highway (2,000 capacity)
     // Scale proportionally: 24-lane highway (24,000 capacity) = 48M sq ft downtown
@@ -234,8 +255,8 @@ function TransportChallenge({ onComplete }) {
     
     if (level === 1 && vehiclesUsed > 0) {
       // Traffic deaths: ~1.33 deaths per 100 million vehicle miles traveled (NHTSA 2022)
-      // 15 miles each way × 2 trips × 250 work days = 15,000 miles/year per person
-      const totalVehicleMiles = vehiclesUsed * 15000; // 15k miles per car per year
+      // 20 miles each way × 2 trips × 250 work days = 20,000 miles/year per person
+      const totalVehicleMiles = vehiclesUsed * 20000; // 20k miles per car per year
       trafficDeathsPerYear = (totalVehicleMiles / 100000000) * 1.33; // Deaths per year for this population
       
       // Personal car costs: $10,728/year average (AAA 2023)
@@ -253,7 +274,7 @@ function TransportChallenge({ onComplete }) {
     let brtAvgSpeed = 0; // mph
     let primaryModeSpeed = 0; // Speed of primary mode
     
-    const distance = 15; // miles
+    const distance = 20; // miles - fixed distance for all calculations
     
     // Get transport choices by type
     const transitChoices = transportChoices.filter(choice => choice.tool.type === 'transit');
@@ -319,17 +340,20 @@ function TransportChallenge({ onComplete }) {
       let volumeCapacityRatio = 0;
       if (transportChoices.length > 0) {
         const totalHighwayVehicleCapacity = transportChoices
-          .filter(choice => choice.tool.type === 'highway')
-          .reduce((sum, choice) => sum + choice.tool.capacity, 0);
+          .find(choice => choice.tool.type === 'highway')?.tool.capacity * (highwayLanes / 2);
         // Use peakHourVehicles (demand) not vehiclesUsed (after modal split) for V/C ratio
         volumeCapacityRatio = totalHighwayVehicleCapacity > 0 ? peakHourVehicles / totalHighwayVehicleCapacity : 0;
       }
+
+      // Calculate total peak hour traffic (people traveling by all modes)
+      const totalPeakHourTraffic = (vehiclesUsed * 1.2) + peakHourBRTUsers + nonCarUsers;
 
       const newStats = {
         // Population counts
         people: peakHourPeople,
         peakHourPeople: peakHourPeople,
-        adt: averageDailyTraffic,
+        totalPeakHourTraffic: Math.round(totalPeakHourTraffic),
+        adt: Math.ceil(averageDailyTraffic),
         
         // Vehicle/Car specific stats
         cars: peakHourVehicles, // For Level 1 display compatibility
@@ -342,7 +366,7 @@ function TransportChallenge({ onComplete }) {
         // Transit specific stats (BRT)
         transitUsed: peakHourBRTUsers, // Generic for backwards compatibility
         peakHourBRTUsers: peakHourBRTUsers,
-        totalBRTUsers: Math.round(totalBRTUsers),
+        totalBRTUsers: Math.floor(totalBRTUsers),
         brtAvgSpeed: Math.round(brtAvgSpeed),
         
         // Active transport specific stats
@@ -372,19 +396,20 @@ function TransportChallenge({ onComplete }) {
         // Speed calculation details for modal
         speedCalculation: totalHighwayVehicleCapacity > 0 ? {
           volume: peakHourVehicles, // Peak hour vehicle demand
-          throughput: vehiclesPerHour,
+          capacity: totalHighwayVehicleCapacity, // Highway capacity
+          throughput: vehiclesPerHour, // Actual throughput after flow efficiency
           freeFlowSpeed: 65,
-          formula: `max(8, 65 × (1 - ${peakHourVehicles}/${vehiclesPerHour}))`,
           theoreticalCapacity: totalHighwayVehicleCapacity,
           flowEfficiency: volumeCapacityRatio > TRAFFIC_FLOW_CONSTANTS.OVERCAPACITY_THRESHOLD 
             ? TRAFFIC_FLOW_CONSTANTS.BREAKDOWN_FLOW_EFFICIENCY 
             : TRAFFIC_FLOW_CONSTANTS.STABLE_FLOW_EFFICIENCY,
-          vcRatio: Math.round(volumeCapacityRatio * 100) / 100
+          vcRatio: Math.round(volumeCapacityRatio * 100) / 100,
+          actualSpeed: vehicleAvgSpeed
         } : null
       };
 
     setStats(newStats);
-  }, [transportChoices, level, brtFleetSize]);
+  }, [transportChoices, level, brtFleetSize, highwayLanes]);
 
   useEffect(() => {
     calculateStats();
@@ -430,6 +455,10 @@ function TransportChallenge({ onComplete }) {
 
   const handleBrtFleetChange = (change) => {
     setBrtFleetSize(prev => Math.max(10, Math.min(100, prev + change)));
+  };
+
+  const handleHighwayLaneChange = (change) => {
+    setHighwayLanes(prev => Math.max(2, Math.min(24, prev + change)));
   };
 
   const canAdvanceLevel = () => {
@@ -552,15 +581,19 @@ function TransportChallenge({ onComplete }) {
               <h4>🏘️ Suburban Neighborhoods</h4>
                              <div className="suburb-context">
                  <p><strong>Multiple Suburbs:</strong> {stats.adt?.toLocaleString()} ADT from all suburban areas to downtown</p>
-                 <p><strong>Distance:</strong> 15 miles average to downtown core</p>
+                 <p><strong>Distance:</strong> {stats.distance} miles average to downtown core</p>
                  <p><strong>Peak Hour Car Traffic:</strong> {`${Math.round(stats.peakHourVehicles * 1.2)?.toLocaleString()} people traveling by ${stats.peakHourVehicles?.toLocaleString()} personal vehicles`}.</p>
                  <p><strong>Peak Hour Transit Traffic:</strong> {`${stats.peakHourBRTUsers?.toLocaleString()} people using BRT`}.</p>
+                 {stats.totalBRTUsers > 0 && (
+                   <p><strong>Daily BRT Ridership:</strong> {`${stats.totalBRTUsers?.toLocaleString()} total daily BRT users`}.</p>
+                 )}
+                 <p><strong>Total Peak Hour Traffic:</strong> {`${stats.totalPeakHourTraffic?.toLocaleString()} people traveling downtown`}.</p>
                </div>
               <div className="suburb-visual">🏠🏠🏠🏠🏠</div>
             </div>
             
             <div className="corridor-section transport-zone">
-              <h4>🛣️ Transportation Corridor (15-mile route)</h4>
+              <h4>🛣️ Transportation Corridor (20-mile route)</h4>
               
               {/* Performance Box */}
               <div className="performance-box">
@@ -591,10 +624,12 @@ function TransportChallenge({ onComplete }) {
                     </div>
                   </div>
                   {transportChoices.some(choice => choice.tool.id === 'brt') && (
-                    <div className="stat-item">
-                      <span className="stat-label">BRT-Speed:</span>
-                      <span className="stat-value">{stats.brtAvgSpeed} mph</span>
-                    </div>
+                    <>
+                      <div className="stat-item">
+                        <span className="stat-label">BRT-Speed:</span>
+                        <span className="stat-value">{stats.brtAvgSpeed} mph</span>
+                      </div>
+                    </>
                   )}
                   <div className="stat-item">
                     <span className="stat-label">People/Hour:</span>
@@ -706,10 +741,40 @@ function TransportChallenge({ onComplete }) {
                             </div>
                             <div className="brt-stats">
                               <span className="frequency">
-                                Frequency: {Math.ceil(118 / brtFleetSize)} min
+                                Frequency: {(118 / brtFleetSize).toFixed(1)} min
                               </span>
                               <span className="capacity">
-                                {Math.floor(60 / Math.ceil(118 / brtFleetSize)) * 160} peak capacity/hr
+                                {Math.round((60 / (118 / brtFleetSize)) * 160)} peak capacity/hr
+                              </span>
+                            </div>
+                          </div>
+                        ) : choice.tool.id === 'highway' ? (
+                          <div className="highway-lane-controls">
+                            <div className="lane-size-controls">
+                              <button 
+                                className="lane-btn"
+                                onClick={() => handleHighwayLaneChange(-2)}
+                                disabled={highwayLanes <= 2}
+                              >
+                                -2
+                              </button>
+                              <span className="lane-size">
+                                {highwayLanes} lanes
+                              </span>
+                              <button 
+                                className="lane-btn"
+                                onClick={() => handleHighwayLaneChange(2)}
+                                disabled={highwayLanes >= 24}
+                              >
+                                +2
+                              </button>
+                            </div>
+                            <div className="highway-stats">
+                              <span className="inbound-lanes">
+                                {highwayLanes / 2} lanes inbound
+                              </span>
+                              <span className="capacity">
+                                {(highwayLanes / 2 * 2000).toLocaleString()} vehicles/hr
                               </span>
                             </div>
                           </div>
@@ -844,14 +909,20 @@ function TransportChallenge({ onComplete }) {
             
             <div className="modal-content">
               <div className="calculation-section">
-                <h4>📐 Formula</h4>
+                <h4>📐 Speed Formula</h4>
                 <div className="formula-box">
-                  Speed = max(8, 65 × (1 - Volume/Throughput))
+                  <p><strong>Based on V/C Ratio (Volume/Capacity):</strong></p>
+                  <ul>
+                    <li>V/C ≤ 0.5: Free flow speed (65 mph)</li>
+                    <li>0.5 &lt; V/C ≤ 0.7: 5% speed reduction per 5% V/C increase</li>
+                    <li>V/C &gt; 0.7: 20% base reduction + 10% per 5% V/C increase</li>
+                    <li>Minimum speed: 8 mph (stop-and-go)</li>
+                  </ul>
                 </div>
               </div>
 
               <div className="calculation-section">
-                <h4>🏗️ How We Get {stats.speedCalculation.throughput.toLocaleString()} Vehicles/Hour Capacity</h4>
+                <h4>🏗️ V/C Ratio and Throughput Calculation</h4>
                 <div className="capacity-breakdown">
                   <div className="capacity-step">
                     <div className="capacity-step-header">
@@ -863,7 +934,8 @@ function TransportChallenge({ onComplete }) {
                         {stats.speedCalculation.theoreticalCapacity.toLocaleString()} vehicles/hour
                       </div>
                       <div className="capacity-desc">
-                        Based on Highway Capacity Manual: 2,000 vehicles per lane per hour under ideal conditions
+                        Based on Highway Capacity Manual: 2,000 vehicles per lane per hour under ideal conditions<br/>
+                        <strong>For {highwayLanes} lanes: {highwayLanes/2} inbound lanes × 2,000 = {stats.speedCalculation.capacity.toLocaleString()} vehicles/hour</strong>
                       </div>
                     </div>
                   </div>
@@ -871,7 +943,29 @@ function TransportChallenge({ onComplete }) {
                   <div className="capacity-step">
                     <div className="capacity-step-header">
                       <span className="capacity-step-number">2</span>
-                      <span className="capacity-step-title">Apply Traffic Flow Efficiency</span>
+                      <span className="capacity-step-title">Calculate V/C Ratio</span>
+                    </div>
+                    <div className="capacity-step-content">
+                      <div className="capacity-calc">
+                        V/C = {stats.speedCalculation.volume.toLocaleString()} ÷ {stats.speedCalculation.capacity.toLocaleString()} = <strong>{stats.speedCalculation.vcRatio}</strong>
+                      </div>
+                      <div className="capacity-desc">
+                        {stats.speedCalculation.vcRatio > 1.0 ? 
+                          `Overcapacity! Demand exceeds supply → severe congestion` :
+                          stats.speedCalculation.vcRatio > 0.7 ?
+                          `Heavy traffic conditions → significant congestion` :
+                          stats.speedCalculation.vcRatio > 0.5 ?
+                          `Moderate traffic → some congestion` :
+                          `Light traffic → free flow conditions`
+                        }
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="capacity-step">
+                    <div className="capacity-step-header">
+                      <span className="capacity-step-number">3</span>
+                      <span className="capacity-step-title">Apply Traffic Flow Efficiency for Throughput</span>
                     </div>
                     <div className="capacity-step-content">
                       <div className="capacity-calc final-capacity">
@@ -879,8 +973,8 @@ function TransportChallenge({ onComplete }) {
                       </div>
                       <div className="capacity-desc">
                         {stats.speedCalculation.vcRatio > 1.0 ? 
-                          `V/C ratio = ${stats.speedCalculation.vcRatio} (overcapacity) → Breakdown flow efficiency = ${stats.speedCalculation.flowEfficiency} (stop-and-go conditions)` :
-                          `V/C ratio = ${stats.speedCalculation.vcRatio} (stable) → Stable flow efficiency = ${stats.speedCalculation.flowEfficiency} (smooth traffic)`
+                          `Breakdown flow efficiency = ${stats.speedCalculation.flowEfficiency} (stop-and-go conditions)` :
+                          `Stable flow efficiency = ${stats.speedCalculation.flowEfficiency} (smooth traffic)`
                         }
                       </div>
                     </div>
@@ -889,56 +983,71 @@ function TransportChallenge({ onComplete }) {
               </div>
 
               <div className="calculation-section">
-                <h4>📊 Input Values for Speed Formula</h4>
+                <h4>📊 Key Values</h4>
                 <div className="inputs-grid">
                   <div className="input-item">
-                    <span className="input-label">Volume:</span>
-                    <span className="input-value">{stats.speedCalculation.volume.toLocaleString()} vehicles</span>
-                    <span className="input-desc">Peak hour demand</span>
+                    <span className="input-label">Peak Hour Vehicles:</span>
+                    <span className="input-value">{stats.speedCalculation.volume.toLocaleString()}</span>
+                    <span className="input-desc">ADT × 0.07 (peak direction)</span>
                   </div>
                   <div className="input-item">
-                    <span className="input-label">Throughput:</span>
-                    <span className="input-value">{stats.speedCalculation.throughput.toLocaleString()} vehicles/hr</span>
-                    <span className="input-desc">Actual highway capacity (calculated above)</span>
+                    <span className="input-label">Highway Capacity:</span>
+                    <span className="input-value">{stats.speedCalculation.capacity.toLocaleString()} veh/hr</span>
+                    <span className="input-desc">{highwayLanes/2} lanes × 2,000</span>
+                  </div>
+                  <div className="input-item">
+                    <span className="input-label">V/C Ratio:</span>
+                    <span className="input-value">{stats.speedCalculation.vcRatio}</span>
+                    <span className="input-desc">{Math.round(stats.speedCalculation.vcRatio * 100)}% of capacity</span>
                   </div>
                   <div className="input-item">
                     <span className="input-label">Free Flow Speed:</span>
                     <span className="input-value">{stats.speedCalculation.freeFlowSpeed} mph</span>
                     <span className="input-desc">Speed with no congestion</span>
                   </div>
-                  <div className="input-item">
-                    <span className="input-label">Speed Floor:</span>
-                    <span className="input-value">8 mph</span>
-                    <span className="input-desc">Minimum in stop-and-go</span>
-                  </div>
                 </div>
               </div>
 
               <div className="calculation-section">
-                <h4>🔢 Step-by-Step Calculation</h4>
+                <h4>🔢 Speed Calculation Steps</h4>
                 <div className="steps">
                   <div className="step">
                     <span className="step-number">1.</span>
                     <span className="step-text">
-                      Volume ÷ Throughput = {stats.speedCalculation.volume.toLocaleString()} ÷ {stats.speedCalculation.throughput.toLocaleString()} = <strong>{(stats.speedCalculation.volume / stats.speedCalculation.throughput).toFixed(2)}</strong>
+                      V/C Ratio = {stats.speedCalculation.volume.toLocaleString()} ÷ {stats.speedCalculation.capacity.toLocaleString()} = <strong>{stats.speedCalculation.vcRatio}</strong>
                     </span>
                   </div>
                   <div className="step">
                     <span className="step-number">2.</span>
                     <span className="step-text">
-                      Congestion factor = 1 - {(stats.speedCalculation.volume / stats.speedCalculation.throughput).toFixed(2)} = <strong>{(1 - stats.speedCalculation.volume / stats.speedCalculation.throughput).toFixed(2)}</strong>
+                      {stats.speedCalculation.vcRatio <= 0.5 ? 
+                        `V/C ≤ 0.5 → No speed reduction (free flow)` :
+                        stats.speedCalculation.vcRatio <= 0.7 ?
+                        `0.5 < V/C ≤ 0.7 → Speed reduction = (${stats.speedCalculation.vcRatio} - 0.5) × 100 = ${((stats.speedCalculation.vcRatio - 0.5) * 100).toFixed(0)}%` :
+                        `V/C > 0.7 → Speed reduction = 20% + ((${stats.speedCalculation.vcRatio} - 0.7) × 200) = ${(20 + ((stats.speedCalculation.vcRatio - 0.7) * 200)).toFixed(0)}%`
+                      }
                     </span>
                   </div>
                   <div className="step">
                     <span className="step-number">3.</span>
                     <span className="step-text">
-                      Raw speed = 65 × {(1 - stats.speedCalculation.volume / stats.speedCalculation.throughput).toFixed(2)} = <strong>{(65 * (1 - stats.speedCalculation.volume / stats.speedCalculation.throughput)).toFixed(1)} mph</strong>
+                      {(() => {
+                        const reduction = stats.speedCalculation.vcRatio <= 0.5 ? 0 :
+                                        stats.speedCalculation.vcRatio <= 0.7 ? (stats.speedCalculation.vcRatio - 0.5) :
+                                        0.2 + ((stats.speedCalculation.vcRatio - 0.7) * 2);
+                        return `Speed = 65 × (1 - ${reduction.toFixed(2)}) = ${(65 * (1 - reduction)).toFixed(1)} mph`;
+                      })()}
                     </span>
                   </div>
                   <div className="step">
                     <span className="step-number">4.</span>
                     <span className="step-text">
-                      Final speed = max(8, {(65 * (1 - stats.speedCalculation.volume / stats.speedCalculation.throughput)).toFixed(1)}) = <strong className="final-result">{stats.averageSpeed} mph</strong>
+                      Final speed = max(8, {(() => {
+                        const reduction = stats.speedCalculation.vcRatio <= 0.5 ? 0 :
+                                        stats.speedCalculation.vcRatio <= 0.7 ? (stats.speedCalculation.vcRatio - 0.5) :
+                                        0.2 + ((stats.speedCalculation.vcRatio - 0.7) * 2);
+                        return (65 * (1 - reduction)).toFixed(1);
+                      })()}) = <strong className="final-result">{stats.speedCalculation.actualSpeed} mph</strong>
                     </span>
                   </div>
                 </div>
@@ -947,16 +1056,16 @@ function TransportChallenge({ onComplete }) {
               <div className="calculation-section">
                 <h4>💡 Why This Speed?</h4>
                 <div className="explanation-box">
-                  {stats.speedCalculation.volume > stats.speedCalculation.throughput ? (
+                  {stats.speedCalculation.vcRatio > 1.0 ? (
                     <>
-                      <p><strong>🚗 Severe Congestion:</strong> Peak hour demand ({stats.speedCalculation.volume.toLocaleString()} cars) exceeds the highway's actual capacity ({stats.speedCalculation.throughput.toLocaleString()} cars/hr).</p>
-                      <p><strong>🐌 Stop-and-Go Traffic:</strong> When demand exceeds capacity, traffic breaks down into stop-and-go conditions. The speed hits our minimum floor of 8 mph, representing severe but still-moving congestion.</p>
+                      <p><strong>🚗 Severe Congestion:</strong> Peak hour demand ({stats.speedCalculation.volume.toLocaleString()} cars) exceeds the highway's capacity ({stats.speedCalculation.capacity.toLocaleString()} cars/hr).</p>
+                      <p><strong>🐌 V/C Ratio = {stats.speedCalculation.vcRatio}:</strong> Traffic is operating at {Math.round(stats.speedCalculation.vcRatio * 100)}% of capacity, causing severe congestion.</p>
                       <p><strong>📈 Induced Demand Effect:</strong> Building more highway capacity attracted more traffic, keeping the system congested despite the expansion.</p>
                     </>
                   ) : (
                     <>
-                      <p><strong>✅ Flowing Traffic:</strong> The highway is operating at {Math.round((stats.speedCalculation.volume / stats.speedCalculation.throughput) * 100)}% of capacity.</p>
-                      <p><strong>🚗 Manageable Congestion:</strong> Traffic is moving but with some slowdown due to volume approaching capacity limits.</p>
+                      <p><strong>✅ V/C Ratio = {stats.speedCalculation.vcRatio}:</strong> The highway is operating at {Math.round(stats.speedCalculation.vcRatio * 100)}% of capacity.</p>
+                      <p><strong>🚗 Traffic Conditions:</strong> {stats.speedCalculation.vcRatio <= 0.5 ? 'Free-flowing traffic with minimal congestion.' : stats.speedCalculation.vcRatio <= 0.7 ? 'Moderate congestion with some speed reduction.' : 'Heavy congestion with significant speed reduction.'}</p>
                     </>
                   )}
                 </div>
