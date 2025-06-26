@@ -478,419 +478,370 @@ function TransportChallenge({ onComplete }) {
 
   return (
     <div className="transport-challenge">
-      {/* Top section: Level info on left, Goal/Hint stacked on right */}
-      <div className="top-section">
+      {/* Game HUD Header */}
+      <div className="game-header">
         <div className="level-info">
-          <h2>Level {level}: {levelData[level].name}</h2>
-        </div>
-        <div className="level-objectives">
-          <div className="level-goal">
-            <strong>Goal:</strong> {levelData[level].goal}
+          <div className="level-badge">Level {level}</div>
+          <div className="objective-mini">
+            Goal: {levelData[level].goal}
           </div>
-          <div className="level-hint">
-            <strong>Hint:</strong> {levelData[level].hint}
+        </div>
+        <div className="stats-mini">
+          <div className="stat-mini">
+            <span>🅿️</span>
+            <span className="stat-mini-value">{Math.round(stats.downtownParking)}%</span>
+          </div>
+          <div className="stat-mini">
+            <span>⏱️</span>
+            <span className="stat-mini-value">
+              {stats.averageTravelTime === 999 ? 'N/A' : `${stats.averageTravelTime}min`}
+            </span>
+          </div>
+          <div className="stat-mini">
+            <span>💰</span>
+            <span className="stat-mini-value">${Math.round(stats.cost/1000000)}M</span>
           </div>
         </div>
       </div>
 
-      {/* <div className="game-header">
-        <div className="level-info">
-          <h2>Level {level}: {levelData[level].name}</h2>
-        </div>
+      {/* Main Game Content */}
+      <div className="game-content">
 
-        <div className={`travel-time-block ${stats.averageTravelTime > 60 ? 'travel-time-bad' : stats.averageTravelTime === 999 ? 'travel-time-none' : 'travel-time-good'}`}>
-          <div className="travel-time-main">
-            <div className="travel-time-value">
-              {stats.averageTravelTime === 999 ? 'No Access' : `${stats.averageTravelTime} minutes`}
+        {/* City Visualization */}
+        <div className="city-view">
+          <div className="corridor-visual">
+            <div className="city-section suburbs">
+              <div className="city-icon">🏘️</div>
+              <h4>Suburbs</h4>
+              <div className="city-stats">
+                <div>{stats.adt?.toLocaleString()} ADT</div>
+                <div>{stats.totalPeakHourTraffic?.toLocaleString()} peak</div>
+              </div>
             </div>
-            <div className="travel-time-label">⏱️ Average Travel Time to Downtown</div>
-          </div>
-          <div className="throughput-info">
-            <span className="throughput-value">{level === 1 ? Math.round(stats.peoplePerHour / 1.2)?.toLocaleString() : stats.peoplePerHour?.toLocaleString()}/hr</span>
-            <span className="throughput-label">{level === 1 ? 'vehicles moved' : 'people moved'}</span>
-          </div>
-        </div>
-
-        <div className="live-stats">
-          <div className="stat">
-            <div className="stat-value">{level === 1 ? stats.cars?.toLocaleString() : stats.people?.toLocaleString()}</div>
-            <div className="stat-label">{level === 1 ? '🚗 Cars to Move' : '👥 People to Move'}</div>
-          </div>
-          <div className="stat">
-            <div className="stat-value">{Math.round(stats.downtownParking)}%</div>
-            <div className="stat-label">🅿️ Downtown Space for Parking</div>
-            <div 
-              className="stat-detail parking-tooltip" 
-              title={`${stats.parkingSpotsNeeded?.toLocaleString()} parking spots × 320 sq ft each`}
-            >
-              {formatLargeNumber(stats.parkingSpaceNeeded)} sq ft needed
+            
+            <div className="transport-corridor-visual">
+              {/* Combined Highway and BRT Animation */}
+              {transportChoices.some(choice => choice.tool.type === 'highway') && (
+                <div className="highway-animation">
+                  <div className="highway-container">
+                    {/* Inbound lanes (to downtown) */}
+                    <div className="highway-direction">
+                      {/* BRT lane on outer edge if BRT exists */}
+                      {transportChoices.some(choice => choice.tool.id === 'brt') && (
+                        <div className="highway-lane brt-lane">
+                          {[...Array(Math.min(3, Math.ceil(brtFleetSize / 30)))].map((_, i) => (
+                            <div
+                              key={`bus-in-${i}`}
+                              className="bus"
+                              style={{
+                                animationDelay: `${i * 4}s`,
+                                animationDuration: `${120 / brtFleetSize}s`
+                              }}
+                            >
+                              🚌
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {[...Array(highwayLanes / 2)].map((_, laneIndex) => {
+                        // Calculate cars per lane based on V/C ratio
+                        const vcRatio = stats.volumeCapacityRatio || 0;
+                        
+                        // For V/C >= 1, we need continuous cars
+                        // Assuming each car+gap takes about 40px, and container is ~800px wide
+                        // That's about 20 car positions across the screen
+                        let carsPerLane = 3;
+                        
+                        if (vcRatio >= 1.0) {
+                          // Gridlock - continuous stream of cars
+                          carsPerLane = 20;
+                        } else if (vcRatio > 0.8) {
+                          // Near capacity - very dense
+                          carsPerLane = 15;
+                        } else if (vcRatio > 0.6) {
+                          // Heavy traffic
+                          carsPerLane = 10;
+                        } else if (vcRatio > 0.4) {
+                          // Moderate traffic
+                          carsPerLane = 6;
+                        } else if (vcRatio > 0.2) {
+                          // Light traffic
+                          carsPerLane = 4;
+                        } else {
+                          // Very light
+                          carsPerLane = 2;
+                        }
+                        
+                        return (
+                          <div key={`lane-in-${laneIndex}`} className="highway-lane">
+                            {[...Array(carsPerLane)].map((_, carIndex) => {
+                              // For packed traffic, space cars evenly across the animation duration
+                              const animationDuration = vcRatio >= 1.0 ? 20 : 
+                                                       vcRatio > 0.8 ? 15 :
+                                                       vcRatio > 0.6 ? 12 :
+                                                       vcRatio > 0.4 ? 10 : 8;
+                              
+                              return (
+                                <div
+                                  key={`car-in-${laneIndex}-${carIndex}`}
+                                  className={`car ${vcRatio >= 1.0 ? 'packed' : stats.vehicleAvgSpeed < 20 ? 'slow' : stats.vehicleAvgSpeed < 40 ? 'medium' : 'fast'}`}
+                                  style={{
+                                    animationDelay: `${(carIndex * animationDuration / carsPerLane) + (laneIndex * 0.2)}s`,
+                                    animationDuration: `${animationDuration}s`
+                                  }}
+                                >
+                                  🚗
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    
+                    {/* Center divider */}
+                    <div className="highway-divider" />
+                    
+                    {/* Outbound lanes (from downtown) */}
+                    <div className="highway-direction">
+                      {[...Array(highwayLanes / 2)].map((_, laneIndex) => {
+                        // Calculate cars per lane based on V/C ratio
+                        const vcRatio = stats.volumeCapacityRatio || 0;
+                        
+                        // For V/C >= 1, we need continuous cars
+                        let carsPerLane = 3;
+                        
+                        if (vcRatio >= 1.0) {
+                          // Gridlock - continuous stream of cars
+                          carsPerLane = 20;
+                        } else if (vcRatio > 0.8) {
+                          // Near capacity - very dense
+                          carsPerLane = 15;
+                        } else if (vcRatio > 0.6) {
+                          // Heavy traffic
+                          carsPerLane = 10;
+                        } else if (vcRatio > 0.4) {
+                          // Moderate traffic
+                          carsPerLane = 6;
+                        } else if (vcRatio > 0.2) {
+                          // Light traffic
+                          carsPerLane = 4;
+                        } else {
+                          // Very light
+                          carsPerLane = 2;
+                        }
+                        
+                        return (
+                          <div key={`lane-out-${laneIndex}`} className="highway-lane">
+                            {[...Array(carsPerLane)].map((_, carIndex) => {
+                              // For packed traffic, space cars evenly across the animation duration
+                              const animationDuration = vcRatio >= 1.0 ? 20 : 
+                                                       vcRatio > 0.8 ? 15 :
+                                                       vcRatio > 0.6 ? 12 :
+                                                       vcRatio > 0.4 ? 10 : 8;
+                              
+                              return (
+                                <div
+                                  key={`car-out-${laneIndex}-${carIndex}`}
+                                  className={`car reverse ${vcRatio >= 1.0 ? 'packed' : stats.vehicleAvgSpeed < 20 ? 'slow' : stats.vehicleAvgSpeed < 40 ? 'medium' : 'fast'}`}
+                                  style={{
+                                    animationDelay: `${(carIndex * animationDuration / carsPerLane) + (laneIndex * 0.2) + 0.5}s`,
+                                    animationDuration: `${animationDuration}s`
+                                  }}
+                                >
+                                  🚙
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                      {/* BRT lane on outer edge if BRT exists */}
+                      {transportChoices.some(choice => choice.tool.id === 'brt') && (
+                        <div className="highway-lane brt-lane">
+                          {[...Array(Math.min(3, Math.ceil(brtFleetSize / 30)))].map((_, i) => (
+                            <div
+                              key={`bus-out-${i}`}
+                              className="bus reverse"
+                              style={{
+                                animationDelay: `${i * 4 + 2}s`,
+                                animationDuration: `${120 / brtFleetSize}s`
+                              }}
+                            >
+                              🚌
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Other transport icons */}
+              <div className="active-transport-line">
+                {transportChoices
+                  .filter(choice => choice.tool.type !== 'highway' && choice.tool.id !== 'brt')
+                  .map(choice => (
+                    <span key={choice.id}>{choice.tool.icon}</span>
+                  ))}
+              </div>
+            </div>
+            
+            <div className="city-section downtown">
+              <div className="city-icon">🏙️</div>
+              <h4>Downtown</h4>
+              <div className="city-stats">
+                <div className="progress-bar">
+                  <div 
+                    className="progress-fill" 
+                    style={{width: `${Math.min(100, stats.downtownParking)}%`}}
+                  />
+                </div>
+                <div>{Math.round(stats.downtownParking)}% parking</div>
+              </div>
             </div>
           </div>
-          <div className="stat">
-            <div className="stat-value">{stats.efficiency}%</div>
-            <div className="stat-label">🚊 Transit/Active</div>
-          </div>
-          <div className="stat">
-            <div className="stat-value">${Math.round(stats.cost/1000000)}M</div>
-            <div className="stat-label">💰 Total Cost</div>
-          </div>
         </div>
-      </div> */}
 
-            <div className="game-content">
-        <div className="tool-palette">
-          <h3>🛠️ Transportation Tools</h3>
-          <div className="tools">
+        {/* Transport Selector */}
+        <div className="transport-selector">
+          <h3>🛠️ Choose Transport</h3>
+          <div className="transport-icons">
             {levelData[level].unlocked.map(tool => (
               <div 
                 key={tool.id}
-                className={`tool ${selectedTool?.id === tool.id ? 'selected' : ''}`}
+                className={`transport-icon-btn ${selectedTool?.id === tool.id ? 'selected' : ''}`}
                 onClick={() => handleToolSelect(tool)}
+                title={`${tool.name}: ${tool.capacity.toLocaleString()}/hr capacity`}
               >
-                <div className="tool-icon">{tool.icon}</div>
-                <div className="tool-name">{tool.name}</div>
-                <div className="tool-stats">
-                  👥{tool.capacity.toLocaleString()}/hr
-                  💰${tool.cost/1000000}M
-                </div>
-                <div className="tool-description">{tool.description}</div>
-                <div className="tool-source" title={tool.source}>📊 Verified Data</div>
+                <div className="transport-emoji">{tool.icon}</div>
+                <div className="transport-label">{tool.name}</div>
+                <div className="transport-cost">${Math.round(tool.cost/1000000)}M</div>
               </div>
             ))}
           </div>
           
-          <div className="tool-actions">
+          <div className="game-actions">
             <button 
-              className="add-transport-btn"
+              className="game-btn add-transport-btn"
               onClick={handleAddTransport}
               disabled={!selectedTool}
             >
-              Add {selectedTool?.name || 'Transport'}
+              Build {selectedTool?.name || 'Transport'}
             </button>
-            <button className="reset-btn" onClick={resetLevel}>
-              Reset Level
+            <button className="game-btn reset-btn" onClick={resetLevel}>
+              Reset
             </button>
           </div>
         </div>
 
-        <div className="transport-corridor">
-          <h3>🗺️ Transportation Corridor</h3>
-          
-          <div className="corridor-visual">
-            <div className="corridor-section suburbs">
-              <h4>🏘️ Suburban Neighborhoods</h4>
-                             <div className="suburb-context">
-                 <p><strong>Multiple Suburbs:</strong> {stats.adt?.toLocaleString()} ADT from all suburban areas to downtown</p>
-                 <p><strong>Distance:</strong> {stats.distance} miles average to downtown core</p>
-                 <p><strong>Peak Hour Car Traffic:</strong> {`${Math.round(stats.peakHourVehicles * 1.2)?.toLocaleString()} people traveling by ${stats.peakHourVehicles?.toLocaleString()} personal vehicles`}.</p>
-                 <p><strong>Peak Hour Transit Traffic:</strong> {`${stats.peakHourBRTUsers?.toLocaleString()} people using BRT`}.</p>
-                 {stats.totalBRTUsers > 0 && (
-                   <p><strong>Daily BRT Ridership:</strong> {`${stats.totalBRTUsers?.toLocaleString()} total daily BRT users`}.</p>
-                 )}
-                 <p><strong>Total Peak Hour Traffic:</strong> {`${stats.totalPeakHourTraffic?.toLocaleString()} people traveling downtown`}.</p>
-               </div>
-              <div className="suburb-visual">🏠🏠🏠🏠🏠</div>
-            </div>
-            
-            <div className="corridor-section transport-zone">
-              <h4>🛣️ Transportation Corridor (20-mile route)</h4>
-              
-              {/* Performance Box */}
-              <div className="performance-box">
-                <div className="performance-stats">
-                  <div className="stat-item">
-                    <span className="stat-label">Travel Time:</span>
-                    <span className="stat-value">
-                      {stats.averageTravelTime === 999 ? 'No Access' : `${stats.averageTravelTime} min`}
-                    </span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="stat-label">
-                      {transportChoices.some(choice => choice.tool.type === 'highway') ? 'Veh-Speed:' : 'Speed:'}
-                    </span>
-                    <div className="stat-value-with-button">
-                      <span className="stat-value">
-                        {stats.averageTravelTime === 999 ? 'N/A' : `${stats.vehicleAvgSpeed} mph`}
-                      </span>
-                      {stats.speedCalculation && (
-                        <button 
-                          className="speed-info-button"
-                          onClick={() => setShowSpeedModal(true)}
-                          title="Click to see speed calculation details"
-                        >
-                          ℹ️
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {transportChoices.some(choice => choice.tool.id === 'brt') && (
-                    <>
-                      <div className="stat-item">
-                        <span className="stat-label">BRT-Speed:</span>
-                        <span className="stat-value">{stats.brtAvgSpeed} mph</span>
-                      </div>
-                    </>
+        {/* Active Transports */}
+        {transportChoices.length > 0 && (
+          <div className="active-transports">
+            <div className="transport-list">
+              {transportChoices.map(choice => (
+                <div key={choice.id} className="transport-badge">
+                  <span>{choice.tool.icon}</span>
+                  <span>{choice.tool.name}</span>
+                  {choice.tool.id === 'brt' && (
+                    <span>({brtFleetSize} buses)</span>
                   )}
-                  <div className="stat-item">
-                    <span className="stat-label">People/Hour:</span>
-                    <span className="stat-value">{stats.peoplePerHour}</span>
-                  </div>
-                  {transportChoices.some(choice => choice.tool.type === 'highway') && (
-                    <div className="stat-item">
-                      <span className="stat-label">Vehicles/Hour:</span>
-                      <span className="stat-value">{stats.vehiclesPerHour.toLocaleString()}</span>
-                    </div>
+                  {choice.tool.id === 'highway' && (
+                    <span>({highwayLanes} lanes)</span>
                   )}
-                  <div className="stat-item">
-                    <span className="stat-label">V/C Ratio:</span>
-                    <span className="stat-value">{stats.volumeCapacityRatio}</span>
-                  </div>
+                  <button 
+                    className="remove-btn"
+                    onClick={() => handleRemoveChoice(choice.id)}
+                  >
+                    ×
+                  </button>
                 </div>
-                
-                {/* Congestion Remarks */}
-                {stats.averageTravelTime === 999 && (
-                  <div className="congestion-remark no-access">
-                    🚫 <strong>No Access:</strong> No transportation infrastructure built yet
-                  </div>
-                )}
-                {stats.averageTravelTime !== 999 && level === 1 && stats.adt > 60000 && (
-                  <div className="congestion-remark induced-traffic">
-                    ⚠️ <strong>Induced Traffic:</strong> Wider highway attracted {stats.adt - 60000} more daily trips!
-                  </div>
-                )}
-                {stats.averageTravelTime !== 999 && level === 1 && stats.averageTravelTime > 60 && (
-                  <div className="congestion-remark heavy-congestion">
-                    🚗 <strong>Heavy Congestion:</strong> More lanes created more traffic - {stats.averageTravelTime}min travel time!
-                  </div>
-                )}
-                {stats.averageTravelTime <= 30 && stats.averageTravelTime !== 999 && (
-                  <div className="congestion-remark good-flow">
-                    ✅ <strong>Good Flow:</strong> Efficient transportation with {stats.averageTravelTime}min travel time
-                  </div>
-                )}
-                
-                {/* Parking Space Warning */}
-                {stats.averageTravelTime !== 999 && level === 1 && stats.downtownParking > 5 && (
-                  <div className="congestion-remark parking-warning">
-                    🅿️ <strong>Parking Crisis:</strong> Cars need {formatLargeNumber(stats.parkingSpaceNeeded)} sq ft ({Math.round(stats.downtownParking)}% of downtown)!
-                  </div>
-                )}
-                {stats.averageTravelTime !== 999 && level === 1 && stats.downtownParking > 2 && stats.downtownParking <= 5 && (
-                  <div className="congestion-remark parking-caution">
-                    ⚠️ <strong>Parking Alert:</strong> Cars consume {formatLargeNumber(stats.parkingSpaceNeeded)} sq ft of valuable downtown space
-                  </div>
-                )}
-                
-                {/* Safety Risk Warning */}
-                {stats.averageTravelTime !== 999 && level === 1 && stats.trafficDeathsPerYear > 1 && (
-                  <div className="congestion-remark safety-risk">
-                    💀 <strong>Safety Risk:</strong> Car dependency causes ~{Math.round(stats.trafficDeathsPerYear)} traffic deaths per year for this population
-                  </div>
-                )}
-                {stats.averageTravelTime !== 999 && level === 1 && stats.trafficDeathsPerYear > 0.1 && stats.trafficDeathsPerYear <= 1 && (
-                  <div className="congestion-remark safety-caution">
-                    ⚠️ <strong>Traffic Risk:</strong> ~{stats.trafficDeathsPerYear.toFixed(1)} expected traffic deaths per year
-                  </div>
-                )}
-                
-                {/* Personal Cost Warning */}
-                {stats.averageTravelTime !== 999 && level === 1 && stats.personalCostPerYear > 50000000 && (
-                  <div className="congestion-remark cost-burden">
-                    💸 <strong>Cost Crisis:</strong> Car dependency costs this population ${formatLargeNumber(stats.personalCostPerYear)} per year
-                  </div>
-                )}
-                {stats.averageTravelTime !== 999 && level === 1 && stats.personalCostPerYear > 10000000 && stats.personalCostPerYear <= 50000000 && (
-                  <div className="congestion-remark cost-warning">
-                    💰 <strong>Cost Burden:</strong> Cars cost this population ${formatLargeNumber(stats.personalCostPerYear)} annually
-                  </div>
-                )}
-              </div>
-
-              {/* Infrastructure Box */}
-              <div className="infrastructure-box">
-                <h5>Infrastructure Lanes</h5>
-                <div className="transport-list">
-                  {transportChoices.length === 0 ? (
-                    <p className="no-transport">No transport added yet. Select tools from the left!</p>
-                  ) : (
-                    transportChoices.map(choice => (
-                      <div key={choice.id} className="transport-item">
-                        <span className="transport-icon">{choice.tool.icon}</span>
-                        <span className="transport-name">{choice.tool.name}</span>
-                        
-                        {choice.tool.id === 'brt' ? (
-                          <div className="brt-fleet-controls">
-                            <div className="fleet-size-controls">
-                              <button 
-                                className="fleet-btn"
-                                onClick={() => handleBrtFleetChange(-10)}
-                                disabled={brtFleetSize <= 10}
-                              >
-                                -10
-                              </button>
-                              <span className="fleet-size">
-                                Fleet: {brtFleetSize} buses
-                              </span>
-                              <button 
-                                className="fleet-btn"
-                                onClick={() => handleBrtFleetChange(10)}
-                                disabled={brtFleetSize >= 100}
-                              >
-                                +10
-                              </button>
-                            </div>
-                            <div className="brt-stats">
-                              <span className="frequency">
-                                Frequency: {(118 / brtFleetSize).toFixed(1)} min
-                              </span>
-                              <span className="capacity">
-                                {Math.round((60 / (118 / brtFleetSize)) * 160)} peak capacity/hr
-                              </span>
-                            </div>
-                          </div>
-                        ) : choice.tool.id === 'highway' ? (
-                          <div className="highway-lane-controls">
-                            <div className="lane-size-controls">
-                              <button 
-                                className="lane-btn"
-                                onClick={() => handleHighwayLaneChange(-2)}
-                                disabled={highwayLanes <= 2}
-                              >
-                                -2
-                              </button>
-                              <span className="lane-size">
-                                {highwayLanes} lanes
-                              </span>
-                              <button 
-                                className="lane-btn"
-                                onClick={() => handleHighwayLaneChange(2)}
-                                disabled={highwayLanes >= 24}
-                              >
-                                +2
-                              </button>
-                            </div>
-                            <div className="highway-stats">
-                              <span className="inbound-lanes">
-                                {highwayLanes / 2} lanes inbound
-                              </span>
-                              <span className="capacity">
-                                {(highwayLanes / 2 * 2000).toLocaleString()} vehicles/hr
-                              </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="transport-capacity">{choice.tool.capacity.toLocaleString()}/hr</span>
-                        )}
-                        
-                        <button 
-                          className="remove-transport"
-                          onClick={() => handleRemoveChoice(choice.id)}
-                        >
-                          ❌
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-            
-            <div className="corridor-section downtown">
-              <h4>🏢 Downtown Core ({Math.round(stats.totalDowntownSpace / 400000)} city blocks)</h4>
-              <div className="downtown-context">
-                <p><strong>Total space:</strong> {formatLargeNumber(stats.totalDowntownSpace)} sq ft</p>
-                <p><strong>Cars need:</strong> {formatLargeNumber(stats.parkingSpaceNeeded)} sq ft for parking</p>
-                <p><strong>Metro scale:</strong> Larger highways serve bigger metropolitan areas</p>
-              </div>
-              <div className="downtown-visual">
-                <div className="downtown-breakdown">
-                  <div className="parking-section" style={{width: `${stats.downtownParking}%`}}>
-                    <span>🅿️ {Math.round(stats.downtownParking)}% Parking</span>
-                  </div>
-                  <div className="building-section" style={{width: `${100 - stats.downtownParking}%`}}>
-                    <span>🏙️ {Math.round(100 - stats.downtownParking)}% Other</span>
-                  </div>
-                </div>
-              </div>
-              <div className="downtown-explanation">
-                <small>Each 1% = {formatLargeNumber(Math.round(stats.totalDowntownSpace / 100))} sq ft</small>
-              </div>
+              ))}
             </div>
           </div>
+        )}
 
-          <div className="modal-split">
-            <h4>📊 How People Travel</h4>
-            <div className="split-bars">
-              <div className="split-bar">
-                <div className="split-label">🚗 Cars</div>
-                <div className="split-visual">
-                  <div 
-                    className="split-fill cars"
-                    style={{width: `${(stats.vehiclesUsed * 1.2 / stats.peakHourPeople) * 100}%`}}
-                  ></div>
-                </div>
-                <div className="split-value">{Math.round((stats.vehiclesUsed * 1.2 / stats.peakHourPeople) * 100)}%</div>
-              </div>
-              
-              <div className="split-bar">
-                <div className="split-label">🚊 Transit</div>
-                <div className="split-visual">
-                  <div 
-                    className="split-fill transit"
-                    style={{width: `${(stats.peakHourBRTUsers / stats.peakHourPeople) * 100}%`}}
-                  ></div>
-                </div>
-                <div className="split-value">{Math.round((stats.peakHourBRTUsers / stats.peakHourPeople) * 100)}%</div>
-              </div>
-              
-              <div className="split-bar">
-                <div className="split-label">🚲 Active</div>
-                <div className="split-visual">
-                  <div 
-                    className="split-fill active"
-                    style={{width: `${((stats.nonCarUsers || 0) / stats.peakHourPeople) * 100}%`}}
-                  ></div>
-                </div>
-                <div className="split-value">{Math.round(((stats.nonCarUsers || 0) / stats.peakHourPeople) * 100)}%</div>
-              </div>
-            </div>
-          </div>
-
-          {canAdvanceLevel() && (
+        {/* Level Progress */}
+        {canAdvanceLevel() && (
+          <div className="level-complete">
+            <div className="success-message">✅ Goal Achieved!</div>
             <button 
-              className="next-level-btn achieved"
+              className="next-level-btn" 
               onClick={handleNextLevel}
             >
-              {level < 3 ? 'Next Level' : 'Complete Challenge'} ✨
+              {level < 3 ? 'Next Level' : 'Complete Game'}
             </button>
-          )}
-          
-          {!canAdvanceLevel() && (
-            <div className="level-feedback">
-              {transportChoices.length === 0 ? (
-                <p>🛠️ <strong>Get Started:</strong> Select and add a transportation option from the tools above to begin!</p>
-              ) : level === 1 ? (
-                <>
-                  <p>🎯 <strong>Highway Challenge:</strong> Try different highway configurations to see what happens!</p>
-                  <p>Current: {Math.round(stats.downtownParking)}% parking (Goal: ≤{levelData[level].maxParking}%)</p>
-                  {level === 1 && (
-                    <button 
-                      className="unlock-transit-btn"
-                      onClick={handleUnlockTransit}
-                    >
-                      I give up! ⚡ Give me other transit options ⚡
-                    </button>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p>🎯 <strong>Goal not reached!</strong> You need to get downtown parking below {levelData[level].maxParking}%</p>
-                  <p>Current: {Math.round(stats.downtownParking)}% parking</p>
-                </>
-              )}
-            </div>
-          )}
+          </div>
+        )}
+        
+        {/* Level 1 Give Up Button */}
+        {!canAdvanceLevel() && level === 1 && transportChoices.length > 0 && (
+          <div className="level-feedback">
+            <p>🎯 <strong>Highway Challenge:</strong> Goal: ≤{levelData[level].maxParking}% parking</p>
+            <p>Current: {Math.round(stats.downtownParking)}% parking</p>
+            <button 
+              className="unlock-transit-btn"
+              onClick={handleUnlockTransit}
+            >
+              I give up! ⚡ Give me other transit options ⚡
+            </button>
+          </div>
+        )}
+        {/* BRT/Highway Controls for Active Transports */}
+        {transportChoices.some(choice => choice.tool.id === 'brt' || choice.tool.id === 'highway') && (
+          <div className="transport-controls">
+            {transportChoices.find(choice => choice.tool.id === 'brt') && (
+              <div className="control-section">
+                <h4>BRT Fleet Size</h4>
+                <div className="control-buttons">
+                  <button onClick={() => handleBrtFleetChange(-10)} disabled={brtFleetSize <= 10}>-10</button>
+                  <span>{brtFleetSize} buses</span>
+                  <button onClick={() => handleBrtFleetChange(10)} disabled={brtFleetSize >= 100}>+10</button>
+                </div>
+              </div>
+            )}
+            {transportChoices.find(choice => choice.tool.id === 'highway') && (
+              <div className="control-section">
+                <h4>Highway Lanes</h4>
+                <div className="control-buttons">
+                  <button onClick={() => handleHighwayLaneChange(-2)} disabled={highwayLanes <= 2}>-2</button>
+                  <span>{highwayLanes} lanes</span>
+                  <button onClick={() => handleHighwayLaneChange(2)} disabled={highwayLanes >= 24}>+2</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Compact Stats Sidebar */}
+      <div className="game-stats">
+        <div className="stat-row">
+          <span className="stat-label">Peak Hour</span>
+          <span className="stat-value">{stats.totalPeakHourTraffic?.toLocaleString()}</span>
         </div>
+        <div className="stat-row">
+          <span className="stat-label">Travel Time</span>
+          <span className="stat-value">{stats.averageTravelTime === 999 ? 'N/A' : `${stats.averageTravelTime}min`}</span>
+        </div>
+        <div className="stat-row">
+          <span className="stat-label">V/C Ratio</span>
+          <span className="stat-value">{stats.volumeCapacityRatio}</span>
+        </div>
+        <div className="stat-row">
+          <span className="stat-label">Efficiency</span>
+          <span className="stat-value">{stats.efficiency}%</span>
+        </div>
+        {stats.speedCalculation && (
+          <button 
+            className="speed-info-btn"
+            onClick={() => setShowSpeedModal(true)}
+            style={{marginTop: '10px', width: '100%'}}
+          >
+            View Speed Details
+          </button>
+        )}
       </div>
 
       {/* Speed Calculation Modal */}
