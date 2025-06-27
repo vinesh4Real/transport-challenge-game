@@ -5,11 +5,12 @@ import TransportChallenge from './components/TransportChallenge';
 import GameResults from './components/GameResults';
 
 function App() {
-  const [gameState, setGameState] = useState('start'); // 'start', 'playing', 'results'
+  const [showStartModal, setShowStartModal] = useState(true);
+  const [gameState, setGameState] = useState('playing'); // 'playing', 'results'
   const [finalStats, setFinalStats] = useState(null);
 
   const handleStartGame = () => {
-    setGameState('playing');
+    setShowStartModal(false);
   };
 
   const handleCompleteGame = (stats) => {
@@ -18,15 +19,19 @@ function App() {
   };
 
   const handleRestartGame = () => {
-    setGameState('start');
+    setGameState('playing');
+    setShowStartModal(true);
     setFinalStats(null);
   };
 
   return (
     <div className="App">
-      {gameState === 'start' && <GameStart onStart={handleStartGame} />}
+      {/* Game is always rendered */}
       {gameState === 'playing' && <TransportChallenge onComplete={handleCompleteGame} />}
       {gameState === 'results' && <GameResults stats={finalStats} onRestart={handleRestartGame} />}
+      
+      {/* Start modal overlays on top */}
+      {showStartModal && <GameStart onStart={handleStartGame} />}
     </div>
   );
 }

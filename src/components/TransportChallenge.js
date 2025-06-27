@@ -446,7 +446,6 @@ function TransportChallenge({ onComplete }) {
   const handleNextLevel = () => {
     if (level < 3) {
       setLevel(level + 1);
-      setTransportChoices([]);
     } else {
       onComplete(stats);
     }
@@ -470,8 +469,18 @@ function TransportChallenge({ onComplete }) {
       return false;
     }
     
-    // All levels: Must meet parking goal to advance
-    return stats.downtownParking <= levelData[level].maxParking;
+    // Level-specific advancement criteria
+    if (level === 1) {
+      // Level 1: Either achieve decent speed OR meet parking goal
+      // This teaches that highways alone create problems
+      return stats.vehicleAvgSpeed >= 25 || stats.downtownParking <= 25;
+    } else if (level === 2) {
+      // Level 2: Must have good traffic flow AND reasonable parking
+      return stats.vehicleAvgSpeed >= 30 && stats.downtownParking <= 30;
+    } else {
+      // Level 3: Efficiency focused - move people effectively
+      return stats.efficiency >= 30 && stats.downtownParking <= 35;
+    }
   };
 
   const resetLevel = () => {
@@ -548,6 +557,10 @@ function TransportChallenge({ onComplete }) {
           </div>
           
           {/* Row 3 - Outcomes */}
+          <div className="stat-item" title="Total downtown area in square feet">
+            <span className="stat-label">Downtown Area</span>
+            <span className="stat-value">{formatLargeNumber(stats.totalDowntownSpace)} sq ft</span>
+          </div>
           <div className="stat-item" title="Downtown space used for parking">
             <span className="stat-label">Parking</span>
             <span className="stat-value highlight">{Math.round(stats.downtownParking)}%</span>
@@ -580,6 +593,34 @@ function TransportChallenge({ onComplete }) {
             </>
           )}
         </div>
+
+        {/* Traffic Status Alert */}
+        {stats.vehicleAvgSpeed > 0 && (
+          <div className={`traffic-status-alert ${
+            stats.vehicleAvgSpeed > 40 ? 'good' : 
+            stats.vehicleAvgSpeed > 25 ? 'moderate' : 
+            stats.vehicleAvgSpeed > 15 ? 'bad' : 'gridlock'
+          }`}>
+            <div className="traffic-status-content">
+              <span className="traffic-icon">
+                {stats.vehicleAvgSpeed > 40 ? '✅' : 
+                 stats.vehicleAvgSpeed > 25 ? '⚠️' : 
+                 stats.vehicleAvgSpeed > 15 ? '🚨' : '🛑'}
+              </span>
+              <span className="traffic-speed">{stats.vehicleAvgSpeed} mph</span>
+              <span className="traffic-label">
+                {stats.vehicleAvgSpeed > 40 ? 'Free Flow' : 
+                 stats.vehicleAvgSpeed > 25 ? 'Heavy Traffic' : 
+                 stats.vehicleAvgSpeed > 15 ? 'Severe Congestion' : 'GRIDLOCK!'}
+              </span>
+              {stats.brtAvgSpeed > 0 && (
+                <span className="brt-comparison">
+                  (BRT: {stats.brtAvgSpeed} mph)
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* City Visualization */}
         <div className="city-view">
@@ -766,6 +807,7 @@ function TransportChallenge({ onComplete }) {
               <div className="city-icon">🏙️</div>
               <h4>Downtown</h4>
               <div className="city-stats">
+                <div>{formatLargeNumber(stats.totalDowntownSpace)} sq ft</div>
                 <div className="progress-bar">
                   <div 
                     className="progress-fill" 
@@ -881,17 +923,33 @@ function TransportChallenge({ onComplete }) {
           </div>
         )}
         
-        {/* Level 1 Give Up Button */}
-        {!canAdvanceLevel() && level === 1 && transportChoices.length > 0 && (
+        {/* Level Feedback */}
+        {!canAdvanceLevel() && transportChoices.length > 0 && (
           <div className="level-feedback">
-            <p>🎯 <strong>Highway Challenge:</strong> Goal: ≤{levelData[level].maxParking}% parking</p>
-            <p>Current: {Math.round(stats.downtownParking)}% parking</p>
-            <button 
-              className="unlock-transit-btn"
-              onClick={handleUnlockTransit}
-            >
-              I give up! ⚡ Give me other transit options ⚡
-            </button>
+            {level === 1 && (
+              <>
+                <p>🎯 <strong>Goal:</strong> Get speed ≥25 mph OR parking ≤25%</p>
+                <p>Current: {stats.vehicleAvgSpeed} mph speed, {Math.round(stats.downtownParking)}% parking</p>
+                <button 
+                  className="unlock-transit-btn"
+                  onClick={handleUnlockTransit}
+                >
+                  I give up! ⚡ Give me transit options ⚡
+                </button>
+              </>
+            )}
+            {level === 2 && (
+              <>
+                <p>🎯 <strong>Goal:</strong> Speed ≥30 mph AND parking ≤30%</p>
+                <p>Current: {stats.vehicleAvgSpeed} mph, {Math.round(stats.downtownParking)}% parking</p>
+              </>
+            )}
+            {level === 3 && (
+              <>
+                <p>🎯 <strong>Goal:</strong> Efficiency ≥30% AND parking ≤35%</p>
+                <p>Current: {stats.efficiency}% efficiency, {Math.round(stats.downtownParking)}% parking</p>
+              </>
+            )}
           </div>
         )}
       </div>

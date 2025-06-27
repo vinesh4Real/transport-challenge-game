@@ -151,25 +151,25 @@ export const SPACE_EFFICIENCY = {
 // LEVEL CONFIGURATION
 export const GAME_LEVELS = {
   1: {
-    name: "Induced Traffic Trap",
-    goal: "Create an efficient transport for suburbanites to reach work downtown", 
-    hint: "Be wary of induced traffic traps, parking demands, safety, and congestion.",
+    name: "Highway Challenge",
+    goal: "Build highways to beat rush hour traffic", 
+    hint: "More lanes = faster traffic... or does it?",
     available_modes: ['highway'],
     target_people: 5000,
-    max_parking_percent: 10 // Impossible with highways alone - forces realization
+    max_parking_percent: 25 // Still need parking goal but secondary
   },
   2: {
-    name: "Transit Revolution", 
-    goal: "Move 5,000 people with <5% downtown parking",
-    hint: "Add transit options! Watch how much parking space you can free up.",
+    name: "Transit Solution", 
+    goal: "Keep traffic moving above 25 mph",
+    hint: "Add BRT with dedicated lanes - compare speeds!",
     available_modes: ['highway', 'light_rail', 'brt', 'express_bus', 'park_ride'],
     target_people: 5000,
-    max_parking_percent: 5
+    max_parking_percent: 25
   },
   3: {
     name: "Complete Streets",
-    goal: "Move 5,000 people with <25% downtown parking", 
-    hint: "Add bikes, walking, and local destinations to minimize car dependency.",
+    goal: "Move everyone efficiently with multiple options", 
+    hint: "Mix transit, bikes, and walking to reduce congestion.",
     available_modes: Object.keys(TRANSPORTATION_MODES),
     target_people: 5000,
     max_parking_percent: 25
