@@ -26,21 +26,30 @@ const calculateVehicleSpeed = (vehicleVolume, vehicleCapacity) => {
   const vcRatio = vehicleVolume / vehicleCapacity;
   const freeFlowSpeed = 65; // mph
   
-  let speedReduction = 0;
-  if (vcRatio <= 0.5) {
-    speedReduction = 0; // No congestion below 50%
-  } else if (vcRatio <= 0.7) {
-    // 5% reduction per 5% V/C increase from 50% to 70%
-    // (0.7 - 0.5) = 0.2 range, want 20% total reduction
-    // So multiply by 100 to get percentage (0.2 * 100 = 20%)
-    speedReduction = (vcRatio - 0.5) * 100 * 0.01; // Convert to decimal
+  // Granular speed decay starting at V/C > 0.5
+  if (vcRatio <= 0.50) {
+    return freeFlowSpeed; // Free flow
+  } else if (vcRatio <= 0.55) {
+    return 62; // Decay starts
+  } else if (vcRatio <= 0.60) {
+    return 58;
+  } else if (vcRatio <= 0.65) {
+    return 53;
+  } else if (vcRatio <= 0.70) {
+    return 47;
+  } else if (vcRatio <= 0.75) {
+    return 40;
+  } else if (vcRatio <= 0.80) {
+    return 32;
+  } else if (vcRatio <= 0.85) {
+    return 23;
+  } else if (vcRatio <= 0.90) {
+    return 15;
+  } else if (vcRatio <= 0.95) {
+    return 10;
   } else {
-    // 20% reduction at 70%, then 10% reduction per 5% V/C increase
-    // Each 0.05 increase = 10% more reduction = multiply by 200
-    speedReduction = 0.2 + ((vcRatio - 0.7) * 200 * 0.01);
+    return 8; // Stop-and-go
   }
-  
-  return Math.max(8, freeFlowSpeed * (1 - speedReduction));
 };
 
 function TransportChallenge({ onComplete }) {
