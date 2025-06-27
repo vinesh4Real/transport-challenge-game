@@ -506,6 +506,77 @@ function TransportChallenge({ onComplete }) {
 
       {/* Main Game Content */}
       <div className="game-content">
+        {/* Stats Grid */}
+        <div className="stats-grid-container">
+          {/* Row 1 - Traffic Volumes */}
+          <div className="stat-item" title="Average Daily Traffic - total vehicles entering downtown per day">
+            <span className="stat-label">ADT</span>
+            <span className="stat-value">{formatLargeNumber(stats.adt || 0)}</span>
+          </div>
+          <div className="stat-item" title="Total Peak Traffic - all people traveling during peak hour">
+            <span className="stat-label">Total Peak Traffic</span>
+            <span className="stat-value">{formatLargeNumber(stats.totalPeakHourTraffic || 0)}</span>
+          </div>
+          <div className="stat-item" title="Total Peak Vehicles - vehicles during peak hour">
+            <span className="stat-label">Total Peak Vehicles</span>
+            <span className="stat-value">{formatLargeNumber(stats.peakHourVehicles || 0)}</span>
+          </div>
+          <div className="stat-item" title="Total Peak BRT Traffic - BRT riders during peak hour">
+            <span className="stat-label">Total Peak BRT</span>
+            <span className="stat-value">{formatLargeNumber(stats.peakHourBRTUsers || 0)}</span>
+          </div>
+          
+          {/* Row 2 - Capacity & Speed */}
+          <div className="stat-item" title="Theoretical highway capacity in vehicles per hour">
+            <span className="stat-label">Lane Capacity</span>
+            <span className="stat-value">{formatLargeNumber((stats.speedCalculation?.capacity || 0))}/hr</span>
+          </div>
+          <div className="stat-item" title="Current Volume/Capacity Ratio">
+            <span className="stat-label">Current V/C</span>
+            <span className="stat-value">{stats.volumeCapacityRatio}</span>
+          </div>
+          <div className="stat-item" title="Vehicle Speed on highway">
+            <span className="stat-label">Vehicle Speed</span>
+            <span className="stat-value">{stats.vehicleAvgSpeed || 0} mph</span>
+          </div>
+          <div className="stat-item" title="BRT Speed with stops">
+            <span className="stat-label">BRT Speed</span>
+            <span className="stat-value">{stats.brtAvgSpeed || 0} mph</span>
+          </div>
+          
+          {/* Row 3 - Outcomes */}
+          <div className="stat-item" title="Downtown space used for parking">
+            <span className="stat-label">Parking</span>
+            <span className="stat-value highlight">{Math.round(stats.downtownParking)}%</span>
+          </div>
+          <div className="stat-item" title="Average travel time">
+            <span className="stat-label">Travel Time</span>
+            <span className="stat-value">{stats.averageTravelTime === 999 ? 'N/A' : `${stats.averageTravelTime}min`}</span>
+          </div>
+          {level === 1 && stats.trafficDeathsPerYear > 0 ? (
+            <>
+              <div className="stat-item warning" title="Estimated annual traffic fatalities">
+                <span className="stat-label">Deaths/yr</span>
+                <span className="stat-value">{stats.trafficDeathsPerYear}</span>
+              </div>
+              <div className="stat-item warning" title="Total annual cost of car ownership">
+                <span className="stat-label">Personal $</span>
+                <span className="stat-value">${Math.round(stats.personalCostPerYear/1000000)}M</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="stat-item" title="Infrastructure cost">
+                <span className="stat-label">Cost</span>
+                <span className="stat-value">${Math.round(stats.cost/1000000)}M</span>
+              </div>
+              <div className="stat-item" title="Percentage using sustainable transport">
+                <span className="stat-label">Efficiency</span>
+                <span className="stat-value">{stats.efficiency}%</span>
+              </div>
+            </>
+          )}
+        </div>
 
         {/* City Visualization */}
         <div className="city-view">
@@ -709,15 +780,47 @@ function TransportChallenge({ onComplete }) {
           <h3>🛠️ Choose Transport</h3>
           <div className="transport-icons">
             {levelData[level].unlocked.map(tool => (
-              <div 
-                key={tool.id}
-                className={`transport-icon-btn ${selectedTool?.id === tool.id ? 'selected' : ''}`}
-                onClick={() => handleToolSelect(tool)}
-                title={`${tool.name}: ${tool.capacity.toLocaleString()}/hr capacity`}
-              >
-                <div className="transport-emoji">{tool.icon}</div>
-                <div className="transport-label">{tool.name}</div>
-                <div className="transport-cost">${Math.round(tool.cost/1000000)}M</div>
+              <div key={tool.id} className="transport-option-wrapper">
+                <div 
+                  className={`transport-icon-btn ${selectedTool?.id === tool.id ? 'selected' : ''}`}
+                  onClick={() => handleToolSelect(tool)}
+                  title={`${tool.name}: ${tool.capacity.toLocaleString()}/hr capacity`}
+                >
+                  <div className="transport-emoji">{tool.icon}</div>
+                  <div className="transport-label">{tool.name}</div>
+                  <div className="transport-cost">${Math.round(tool.cost/1000000)}M</div>
+                </div>
+                {/* Counter controls below when selected */}
+                {selectedTool?.id === tool.id && tool.id === 'brt' && (
+                  <div className="transport-counter-pill">
+                    <button 
+                      className="counter-btn"
+                      onClick={() => handleBrtFleetChange(-10)}
+                      disabled={brtFleetSize <= 10}
+                    >-</button>
+                    <span className="counter-value">{brtFleetSize} buses</span>
+                    <button 
+                      className="counter-btn"
+                      onClick={() => handleBrtFleetChange(10)}
+                      disabled={brtFleetSize >= 100}
+                    >+</button>
+                  </div>
+                )}
+                {selectedTool?.id === tool.id && tool.id === 'highway' && (
+                  <div className="transport-counter-pill">
+                    <button 
+                      className="counter-btn"
+                      onClick={() => handleHighwayLaneChange(-2)}
+                      disabled={highwayLanes <= 2}
+                    >-</button>
+                    <span className="counter-value">{highwayLanes} lanes</span>
+                    <button 
+                      className="counter-btn"
+                      onClick={() => handleHighwayLaneChange(2)}
+                      disabled={highwayLanes >= 24}
+                    >+</button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -786,31 +889,6 @@ function TransportChallenge({ onComplete }) {
             >
               I give up! ⚡ Give me other transit options ⚡
             </button>
-          </div>
-        )}
-        {/* BRT/Highway Controls for Active Transports */}
-        {transportChoices.some(choice => choice.tool.id === 'brt' || choice.tool.id === 'highway') && (
-          <div className="transport-controls">
-            {transportChoices.find(choice => choice.tool.id === 'brt') && (
-              <div className="control-section">
-                <h4>BRT Fleet Size</h4>
-                <div className="control-buttons">
-                  <button onClick={() => handleBrtFleetChange(-10)} disabled={brtFleetSize <= 10}>-10</button>
-                  <span>{brtFleetSize} buses</span>
-                  <button onClick={() => handleBrtFleetChange(10)} disabled={brtFleetSize >= 100}>+10</button>
-                </div>
-              </div>
-            )}
-            {transportChoices.find(choice => choice.tool.id === 'highway') && (
-              <div className="control-section">
-                <h4>Highway Lanes</h4>
-                <div className="control-buttons">
-                  <button onClick={() => handleHighwayLaneChange(-2)} disabled={highwayLanes <= 2}>-2</button>
-                  <span>{highwayLanes} lanes</span>
-                  <button onClick={() => handleHighwayLaneChange(2)} disabled={highwayLanes >= 24}>+2</button>
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>

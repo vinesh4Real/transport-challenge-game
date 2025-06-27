@@ -75,6 +75,97 @@
   margin-right: auto;
 }
 
+/* Stats Grid Container */
+.stats-grid-container {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(0, 212, 255, 0.15);
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 15px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.stats-grid-container .stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  cursor: help;
+  transition: all 0.2s ease;
+  min-height: 28px;
+}
+
+.stats-grid-container .stat-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(0, 212, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.stats-grid-container .stat-label {
+  color: #888;
+  font-size: 8px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 1px;
+  font-weight: normal;
+}
+
+.stats-grid-container .stat-value {
+  color: #00ff88;
+  font-weight: 600;
+  font-size: 14px !important;
+  line-height: 1;
+}
+
+.stats-grid-container .stat-value.highlight {
+  color: #00d4ff;
+  font-size: 15px !important;
+}
+
+.stats-grid-container .stat-item.warning .stat-value {
+  color: #ff6b6b;
+}
+
+.stats-grid-container .stat-item.warning {
+  background: rgba(255, 107, 107, 0.08);
+  border-color: rgba(255, 107, 107, 0.15);
+}
+
+.stats-grid-container .stat-item.warning:hover {
+  background: rgba(255, 107, 107, 0.12);
+  border-color: rgba(255, 107, 107, 0.25);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .stats-grid-container {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: auto;
+    gap: 4px;
+    padding: 6px;
+  }
+  
+  .stats-grid-container .stat-item {
+    padding: 4px;
+    min-height: 24px;
+  }
+  
+  .stats-grid-container .stat-value {
+    font-size: 12px !important;
+  }
+  
+  .stats-grid-container .stat-label {
+    font-size: 7px !important;
+  }
+}
+
 /* City Visualization */
 .city-view {
   background: rgba(255, 255, 255, 0.05);
@@ -363,6 +454,13 @@
   margin-bottom: 20px;
 }
 
+.transport-option-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
 .transport-icon-btn {
   width: 80px;
   height: 80px;
@@ -412,6 +510,68 @@
   padding: 2px 6px;
   border-radius: 10px;
   font-weight: bold;
+}
+
+/* Transport Counter Pill - Minimal Design */
+.transport-counter-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 20px;
+  padding: 4px 8px;
+  animation: fadeIn 0.2s ease;
+}
+
+.counter-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  color: #999;
+  font-size: 11px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+}
+
+.counter-btn:hover:not(:disabled) {
+  background: rgba(0, 212, 255, 0.2);
+  border-color: rgba(0, 212, 255, 0.4);
+  color: #00d4ff;
+}
+
+.counter-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  color: #666;
+}
+
+.counter-value {
+  color: #00ff88;
+  font-weight: 600;
+  font-size: 12px;
+  min-width: 40px;
+  text-align: center;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Action Buttons */
