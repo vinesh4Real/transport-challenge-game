@@ -124,13 +124,14 @@ function TransportChallenge({ onComplete }) {
           // Calculate modal split with induced traffic effect
       // Downtown receives traffic from multiple suburbs - ADT increases with highway capacity (induced demand)
       const highwayChoices = transportChoices.filter(choice => choice.tool.type === 'highway');
-      let averageDailyTraffic = 60000; // Base ADT with 2-lane highway
+      let totalADT = 60000; // Base total ADT with 2-lane highway
+      let vehicleADT = totalADT; // Initially all traffic is vehicles
       
       if (highwayChoices.length > 0) {
         // Calculate induced traffic based on number of lanes
         if (HIGHWAY_INDUCED_TRAFFIC[highwayLanes]) {
           // Use predefined values for standard lane counts
-          averageDailyTraffic = HIGHWAY_INDUCED_TRAFFIC[highwayLanes];
+          totalADT = HIGHWAY_INDUCED_TRAFFIC[highwayLanes];
         } else {
           // For non-standard lane counts, interpolate
           const sortedLanes = Object.keys(HIGHWAY_INDUCED_TRAFFIC).map(Number).sort((a, b) => a - b);
@@ -142,56 +143,57 @@ function TransportChallenge({ onComplete }) {
           
           // Linear interpolation
           const ratio = (highwayLanes - lowerBound) / (upperBound - lowerBound);
-          averageDailyTraffic = Math.ceil(lowerADT + ratio * (upperADT - lowerADT));
+          totalADT = Math.ceil(lowerADT + ratio * (upperADT - lowerADT));
         }
+        vehicleADT = totalADT; // Start with all traffic as vehicles
       }
 
       // BRT modal split calculations (Level 2+)
       const brtChoices = transportChoices.filter(choice => choice.tool.id === 'brt');
-      console.log('BRT Debug:', { 
-        brtChoices: brtChoices.length, 
-        level, 
-        transportChoices: transportChoices.map(c => c.tool.id),
-        brtFleetSize 
-      });
+      let dailyBRTRidership = 0;
+      let peakHourBRTCapacity = 0;
       
       if (brtChoices.length > 0 && level >= 2) {
         // BRT calculations based on fleet size
-        // Use exact frequency for more accurate calculations
-        const frequency = 118 / brtFleetSize; // exact minutes between buses
-        const busesPerHour = 60 / frequency; // exact buses per hour
+        const frequency = 118 / brtFleetSize; // minutes between buses
+        const busesPerHour = Math.floor(60 / frequency); // FLOOR to get whole buses
         
-        // Load factors: Peak (1.0) vs Off-peak (0.689)
-        const peakCapacityPerHour = busesPerHour * 160 * 1.0; // 160 passengers per articulated bus
-        const offPeakCapacityPerHour = busesPerHour * 160 * 0.689;
+        // Peak hour capacity (100% occupancy)
+        peakHourBRTCapacity = busesPerHour * 160; // 160 passengers per articulated bus
         
-        // Daily ridership: 6 peak hours + 10 off-peak hours
-        const dailyRidership = (peakCapacityPerHour * 6) + (offPeakCapacityPerHour * 10);
-        totalBRTUsers = Math.floor(dailyRidership);
+        // Daily ridership: 6 hours @ 100%, 6 hours @ 60%, 6 hours @ 30%
+        // Using 18 hour service day
+        const peakHours = 6;
+        const midHours = 6;
+        const offPeakHours = 6;
         
-        // Modal split: 75% from cars, 25% induced demand
-        const carTripsRemoved = (dailyRidership * 0.75) / 1.2; // 1.2 people per car
+        dailyBRTRidership = Math.floor(
+          (peakHourBRTCapacity * peakHours * 1.0) +    // Peak: 100% occupancy
+          (peakHourBRTCapacity * midHours * 0.6) +     // Mid: 60% occupancy  
+          (peakHourBRTCapacity * offPeakHours * 0.3)   // Off-peak: 30% occupancy
+        );
+        
+        totalBRTUsers = dailyBRTRidership;
+        
+        // Vehicle ADT = Total ADT - Daily BRT ridership
+        vehicleADT = Math.max(0, totalADT - dailyBRTRidership);
         
         // Debug logging
         console.log('BRT Calculations:', {
           brtFleetSize,
-          frequency,
+          frequency: frequency.toFixed(2),
           busesPerHour,
-          peakCapacityPerHour,
-          offPeakCapacityPerHour,
-          dailyRidership,
-          carTripsRemoved,
-          originalADT: averageDailyTraffic,
-          newADT: Math.max(0, averageDailyTraffic - carTripsRemoved)
+          peakHourBRTCapacity,
+          dailyBRTRidership,
+          totalADT,
+          vehicleADT
         });
-        
-        // Reduce ADT by car trips removed
-        averageDailyTraffic = Math.ceil(Math.max(0, averageDailyTraffic - carTripsRemoved));
       }
     
     // Unified vehicle and people counting system
-    const peakHourVehicles = Math.round(averageDailyTraffic * 0.07); // Peak direction = 70% of 10% peak hour traffic
-    const peakHourPeople = peakHourVehicles * 1.2; // Convert vehicles to people
+    const peakHourVehicles = Math.round(vehicleADT * 0.07); // Peak direction = 70% of 10% peak hour traffic
+    // Total peak hour people = vehicle passengers + BRT riders
+    const peakHourPeople = (peakHourVehicles * 1.2) + peakHourBRTCapacity;
     
     // Get highway capacity for all levels
     const highwayChoice = transportChoices.find(choice => choice.tool.type === 'highway');
@@ -215,21 +217,14 @@ function TransportChallenge({ onComplete }) {
       }
     } else {
       // Levels 2-3: Calculate modal split with transit/active options
-      // For BRT, use actual peak hour capacity based on fleet size
-      let actualPeakHourBRTCapacity = 0;
-      if (brtChoices.length > 0) {
-        const frequency = 118 / brtFleetSize;
-        const busesPerHour = 60 / frequency;
-        actualPeakHourBRTCapacity = busesPerHour * 160 * 1.0; // Peak hour capacity
-      }
+      // BRT users in peak hour = peak hour BRT capacity (100% occupancy)
+      peakHourBRTUsers = peakHourBRTCapacity;
       
-      // Use actual BRT capacity if available, otherwise use generic transit capacity
-      const effectiveTransitCapacity = brtChoices.length > 0 ? actualPeakHourBRTCapacity : transitCapacity;
+      // Active transport users (bikes/walking) - small percentage in peak hour
+      nonCarUsers = Math.min(activeCapacity * 0.8, Math.round(totalADT * 0.01)); // ~1% of total ADT
       
-      peakHourBRTUsers = Math.floor(Math.min(effectiveTransitCapacity * 0.6, peakHourPeople * 0.8));
-      nonCarUsers = Math.min(activeCapacity * 0.8, (peakHourPeople - peakHourBRTUsers) * 0.5);
-      const remainingPeople = Math.max(0, peakHourPeople - peakHourBRTUsers - nonCarUsers);
-      vehiclesUsed = Math.round(remainingPeople / 1.2); // Convert back to vehicles
+      // Vehicles used = peak hour vehicles from vehicleADT
+      vehiclesUsed = peakHourVehicles;
     }
     
     // Calculate parking needed (vehiclesUsed is already in vehicles, need 1.5 spaces per vehicle for peak)
@@ -338,11 +333,9 @@ function TransportChallenge({ onComplete }) {
 
       // Calculate V/C ratio for display
       let volumeCapacityRatio = 0;
-      if (transportChoices.length > 0) {
-        const totalHighwayVehicleCapacity = transportChoices
-          .find(choice => choice.tool.type === 'highway')?.tool.capacity * (highwayLanes / 2);
-        // Use peakHourVehicles (demand) not vehiclesUsed (after modal split) for V/C ratio
-        volumeCapacityRatio = totalHighwayVehicleCapacity > 0 ? peakHourVehicles / totalHighwayVehicleCapacity : 0;
+      if (totalHighwayVehicleCapacity > 0) {
+        // V/C ratio uses vehicle ADT (vehicles only, not BRT which has dedicated lanes)
+        volumeCapacityRatio = peakHourVehicles / totalHighwayVehicleCapacity;
       }
 
       // Calculate total peak hour traffic (people traveling by all modes)
@@ -353,7 +346,8 @@ function TransportChallenge({ onComplete }) {
         people: peakHourPeople,
         peakHourPeople: peakHourPeople,
         totalPeakHourTraffic: Math.round(totalPeakHourTraffic),
-        adt: Math.ceil(averageDailyTraffic),
+        adt: Math.ceil(vehicleADT),
+        totalADT: Math.ceil(totalADT),
         
         // Vehicle/Car specific stats
         cars: peakHourVehicles, // For Level 1 display compatibility
@@ -395,7 +389,7 @@ function TransportChallenge({ onComplete }) {
         
         // Speed calculation details for modal
         speedCalculation: totalHighwayVehicleCapacity > 0 ? {
-          volume: peakHourVehicles, // Peak hour vehicle demand
+          volume: peakHourVehicles, // Peak hour vehicle demand from vehicleADT
           capacity: totalHighwayVehicleCapacity, // Highway capacity
           throughput: vehiclesPerHour, // Actual throughput after flow efficiency
           freeFlowSpeed: 65,
